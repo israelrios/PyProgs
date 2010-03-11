@@ -1,0 +1,7 @@
+This repository store some python programs and files.
+
+checkmail:
+  This application has monitors to check mails in a e-groupware mailbox and import them to an local imap repository. Moreover, it has some monitors to applications used at Serpro and Celepar.
+
+mirror:
+  An google appengine application to surf on restrictive proxies.
