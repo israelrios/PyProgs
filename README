@@ -5,3 +5,6 @@ checkmail:
 
 mirror:
   An google appengine application to surf on restrictive proxies.
+
+mergedev:
+  Tool that generates patch files only of changes made by a developer in an especial CVS branch between an period of time.
