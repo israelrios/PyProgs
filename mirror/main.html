@@ -44,7 +44,7 @@ input.txt {
 	border:1px solid #999999;
 	font-size:0.9em;
 	padding:5px;
-	width:250px;
+	width:350px;
 }
 input.btn {
 	font-size:0.9em;
@@ -55,12 +55,12 @@ input.btn {
 }
 </style>
 </head>
-<body>
+<body onload="document.getElementById('edurl').focus();">
 <div class="box">
   <h1>Url Viewer</h1>
   <center>
     <form action="" method="post" accept-charset="utf-8">
-      <input name="url" type="text" class="txt" id="input" value="type url here.." onfocus="this.value='';" />
+      <input name="url" type="text" class="txt" id="edurl" />
       <input type="submit" class="btn" value="Go" />
     </form>
   </center>
