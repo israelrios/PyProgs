@@ -16,13 +16,13 @@
 
 # Change by Israel to provide url "obfuscation"
 
-__author__ = "Brett Slatkin (bslatkin@gmail.com)"
+# Based on work from Brett Slatkin (bslatkin@gmail.com)
+__author__ = "Israel Rios (isrrios@gmail.com)"
 
 import os
 import re
 import urlparse
 import urllib
-import base64
 import logging
 
 ################################################################################
@@ -59,45 +59,45 @@ UT_BASE_ONLY = 4 # %(base)s/
 
 REPLACEMENT_REGEXES = [
   (TAG_START + SAME_DIR_URL_REGEX,
-     "\g<tag>\g<equals>\g<quote>%s", UT_ACCESSED_DIR),
+     r"\g<tag>\g<equals>\g<quote>%s", UT_ACCESSED_DIR),
 
   (TAG_START + TRAVERSAL_URL_REGEX,
-     "\g<tag>\g<equals>\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
+     r"\g<tag>\g<equals>\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
 
   (TAG_START + BASE_RELATIVE_URL_REGEX,
-     "\g<tag>\g<equals>\g<quote>/%s", UT_BASE),
+     r"\g<tag>\g<equals>\g<quote>/%s", UT_BASE),
 
   (TAG_START + ROOT_DIR_URL_REGEX,
-     "\g<tag>\g<equals>\g<quote>/%s", UT_BASE_ONLY),
+     r"\g<tag>\g<equals>\g<quote>/%s", UT_BASE_ONLY),
 
   # Need this because HTML tags could end with '/>', which confuses the
   # tag-matching regex above, since that's the end-of-match signal.
   (TAG_START + ABSOLUTE_URL_REGEX,
-     "\g<tag>\g<equals>\g<quote>/%s", UT_URL),
+     r"\g<tag>\g<equals>\g<quote>/%s", UT_URL),
 
   (CSS_IMPORT_START + SAME_DIR_URL_REGEX,
-     "@import\g<spacing>\g<quote>%s", UT_ACCESSED_DIR),
+     r"@import\g<spacing>\g<quote>%s", UT_ACCESSED_DIR),
 
   (CSS_IMPORT_START + TRAVERSAL_URL_REGEX,
-     "@import\g<spacing>\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
+     r"@import\g<spacing>\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
 
   (CSS_IMPORT_START + BASE_RELATIVE_URL_REGEX,
-     "@import\g<spacing>\g<quote>/%s", UT_BASE),
+     r"@import\g<spacing>\g<quote>/%s", UT_BASE),
 
   (CSS_IMPORT_START + ABSOLUTE_URL_REGEX,
-     "@import\g<spacing>\g<quote>/%s", UT_URL),
+     r"@import\g<spacing>\g<quote>/%s", UT_URL),
 
   (CSS_URL_START + SAME_DIR_URL_REGEX,
-     "url(\g<quote>%s", UT_ACCESSED_DIR),
+     r"url(\g<quote>%s", UT_ACCESSED_DIR),
   
   (CSS_URL_START + TRAVERSAL_URL_REGEX,
-      "url(\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
+     r"url(\g<quote>%s", UT_ACCESSED_DIR_RELATIVE),
 
   (CSS_URL_START + BASE_RELATIVE_URL_REGEX,
-      "url(\g<quote>/%s", UT_BASE),
+     r"url(\g<quote>/%s", UT_BASE),
 
   (CSS_URL_START + ABSOLUTE_URL_REGEX,
-      "url(\g<quote>/%s", UT_URL),
+     r"url(\g<quote>/%s", UT_URL),
 ]
 
 ################################################################################
@@ -122,7 +122,7 @@ def transformUrl(mo, replacement, urltype, base_url, accessed_dir):
     elif urltype == UT_BASE_ONLY: # %(base)s/
         url = "%s/" % base_url
     url = encodeUrl(url)
-    return mo.expand(replacement % url)
+    return mo.expand(replacement % url.replace('\\', '\\\\'))
 
 def TransformContent(base_url, accessed_url, content):
   url_obj = urlparse.urlparse(accessed_url)

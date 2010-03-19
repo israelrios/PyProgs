@@ -54,6 +54,17 @@ input.btn {
 	padding: 4px;
 }
 </style>
+<script type="text/javascript">
+  (function(){
+     var c = document.cookie.split(';');
+     for(var i=0; i < c.length; i++){
+       var e = c[i].indexOf("=");
+       var n = e > -1 ? c[i].substr(0,e) : c[i];
+       n = n.replace( /^\s+|\s+$/g, "" ); //trim
+       document.cookie = n + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+     }
+   })();
+</script>
 </head>
 <body onload="document.getElementById('edurl').focus();">
 <div class="box">
@@ -65,7 +76,7 @@ input.btn {
     </form>
   </center>
   <p class="footer">Instructions: Just type the URL of any web page in the input box above (<em>e.g. labnol.org</em>)  and hit Enter.</p>
-  <p class="footer">You too can <a href="http://www.labnol.org/?p=12890">setup a personal proxy server</a> using Google App Engine. This is a sample page from <a href="http://www.labnol.org/">Digital Inspiration</a> based on the <a href="http://mirrorrr.appspot.com/">Mirrorrr</a> project.</p>
+  <p class="footer">You too can <a href="http://www.labnol.org/?p=12890">setup a personal proxy server</a> using Google App Engine.</p>
 </div>
 </body>
 </html>
