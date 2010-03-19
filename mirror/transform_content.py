@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Change by Israel to provide url "obfuscation"
+
 __author__ = "Brett Slatkin (bslatkin@gmail.com)"
 
 import os
@@ -100,42 +102,13 @@ REPLACEMENT_REGEXES = [
 
 ################################################################################
 
-B64_PREFIX = "b64."
+URL_PREFIX = "u--v"
 
 def encodeUrl(url):
-    newurl = []
-    for p in url.split('/'):
-        if len(p) > 0 and not p.startswith(B64_PREFIX):
-            newurl.append(B64_PREFIX + urllib.quote(base64.b64encode(p)))
-        else:
-            newurl.append(p)
-    return '/'.join(newurl)
+    return url.replace('.', URL_PREFIX)
 
 def decodeUrl(url):
-    newurl = []
-    iparam = url.find('?')
-    params = ""
-    if iparam >= 0:
-        params = url[iparam:]
-        url = url[:iparam]
-    for p in url.split('/'):
-        try:
-            convert = urllib.unquote(p)
-            #trata os espaços na url, os espaços são ignorados na regex para urls e isso pode ocasionar na coversão da parte pela metade
-            parts = convert.split(' ')
-            if len(parts) > 1:
-                convert = parts[0]
-            #foi necessário fazer um loop para tratar os casos de recodificação
-            while convert.startswith(B64_PREFIX):
-                convert = base64.b64decode(urllib.unquote(convert[len(B64_PREFIX):]))
-                convert = urllib.unquote(convert)
-            if len(parts) > 1:
-                convert += ' ' + ' '.join(parts[1:])
-            newurl.append(urllib.quote(convert))
-        except:
-            logging.warn('Error converting url from base 64. %s', urllib.unquote(p));
-            newurl.append(urllib.unquote(p))
-    return '/'.join(newurl) + params
+    return url.replace(URL_PREFIX, '.')
 
 def transformUrl(mo, replacement, urltype, base_url, accessed_dir):
     if urltype == UT_URL: #\g<url>
@@ -149,7 +122,6 @@ def transformUrl(mo, replacement, urltype, base_url, accessed_dir):
     elif urltype == UT_BASE_ONLY: # %(base)s/
         url = "%s/" % base_url
     url = encodeUrl(url)
-    #url = urllib.quote(base64.b64encode(url))
     return mo.expand(replacement % url)
 
 def TransformContent(base_url, accessed_url, content):
@@ -207,4 +179,4 @@ if __name__ == "__main__":
       
     print TransformContent("mydir.com", '', text)
     
-    print decodeUrl("b64.cDIudHJyc2YuY29tLmJy/b64.aW1hZ2U%3D/b64.Z2V0P289Y2YmYW1wO3c9ODkmYW1wO2g9NjcmYW1wO3NyYz1odHRwOg%3D%3D//b64.aW1nLnRlcnJhLmNvbS5icg%3D%3D/b64.aQ%3D%3D/b64.MjAxMA%3D%3D/b64.MDM%3D/b64.MDE%3D/b64.MTQ2MTUyOC0yNTgyLWF0bTEwLmpwZw%3D%3D")
+    print decodeUrl("/mydiru--vcom/u--vu--v/")

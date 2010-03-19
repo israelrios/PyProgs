@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 # Copyright 2008 Brett Slatkin
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# Changed by Israel Rios for better support to POST requests and to provide url "obfuscation"
 
 __author__ = "Brett Slatkin (bslatkin@gmail.com)"
 
@@ -112,7 +115,7 @@ class MirroredContent(object):
     return memcache.get(key_name)
 
   @staticmethod
-  def fetch_and_store(key_name, base_url, translated_address, mirrored_url):
+  def fetch_and_store(key_name, base_url, translated_address, mirrored_url, rdata, rheaders):
     """Fetch and cache a page.
     
     Args:
@@ -134,7 +137,15 @@ class MirroredContent(object):
 
     logging.debug("Fetching '%s'", mirrored_url)
     try:
-      response = urlfetch.fetch(mirrored_url)
+      rheaders = dict(rheaders)
+      for header in ['Referer', 'Content-Length', 'Connection', 'Keep-Alive', 'Host', 'Pragma', 'Cache-Control', 'If-None-Match', 'Accept']:
+          if header in rheaders:
+              del rheaders[header]
+      if rdata != None and len(rdata) > 0:
+        logging.debug('Doing Post...')
+        response = urlfetch.fetch(mirrored_url, payload=rdata, method=urlfetch.POST) #headers=rheaders
+      else:
+        response = urlfetch.fetch(mirrored_url)
     except (urlfetch.Error, apiproxy_errors.Error):
       logging.exception("Could not fetch URL")
       return None
@@ -227,20 +238,35 @@ class HomeHandler(BaseHandler):
 
 
 class MirrorHandler(BaseHandler):
+  def post(self, base_url):
+      return self.get(base_url)
+      
   def get(self, base_url):
     translated_address = self.get_relative_url()[1:]  # remove leading /
     if translated_address == 'favicon.ico' or translated_address == 'none':
         return self.error(404)
     
     translated_address = transform_content.decodeUrl(translated_address)
+    
     base_url = re.search(r"/*([^/]+)", translated_address).group(1);
     
     assert base_url
     
+    #check for request without a base path, includes the referer base path if necessary
+    if base_url.find('.') < 0 and 'Referer' in self.request.headers:
+        referer = transform_content.decodeUrl(self.request.headers['Referer'])
+        refmo = re.search(r"://[^/]+/+([^/]+)", referer)
+        if refmo != None:
+            refbase = refmo.group(1);
+            if base_url != refbase:
+                logging.debug("Basing address on: %s", refbase)
+                translated_address = refbase + '/' + translated_address
+                base_url = refbase  
+    
     # Log the user-agent and referrer, to see who is linking to us.
     logging.debug('User-Agent = "%s", Referrer = "%s"',
                   self.request.user_agent,
-                  self.request.referer)
+                  transform_content.decodeUrl(self.request.referer))
     logging.debug('Base_url = "%s", url = "%s"', base_url, self.request.url)
     
     mirrored_url = HTTP_PREFIX + translated_address
@@ -257,7 +283,7 @@ class MirrorHandler(BaseHandler):
       cache_miss = True
       content = MirroredContent.fetch_and_store(key_name, base_url,
                                                 translated_address,
-                                                mirrored_url)
+                                                mirrored_url, self.request.body, self.request.headers)
     if content is None:
       return self.error(404)
 
