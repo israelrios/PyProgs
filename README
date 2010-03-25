@@ -8,3 +8,6 @@ mirror:
 
 mergedev:
   Tool that generates patch files only of changes made by a developer in an especial CVS branch between an period of time.
+
+ProxyHTTPServer:
+  A HTTP proxy server to use with mirror app.
