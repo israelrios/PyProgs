@@ -112,7 +112,7 @@ class Client(object):
         logging.debug('Doing Post...')
         self.response = urlfetch.fetch(mirrored_url, payload=rdata, method=urlfetch.POST, headers=rheaders, follow_redirects=False, deadline=10)
       else:
-        logging.debug("Cookie: %s", rheaders.get('Cookie', ''))
+        #logging.debug("Cookie: %s", rheaders.get('Cookie', ''))
         self.response = urlfetch.fetch(mirrored_url, headers=rheaders, follow_redirects=False, deadline=10)
     except (urlfetch.Error, apiproxy_errors.Error):
       logging.exception("Could not fetch URL")
@@ -225,12 +225,43 @@ class MirrorHandler(BaseHandler):
         self.response.out.write(content)
 
     self.response.set_status(cres.status_code)
+    
+
+class ProxyServerHandler(BaseHandler):
+  def post(self):
+      return self.get()
+      
+  def get(self):
+    url = self.get_relative_url()[4:]  # remove leading /ps/
+    pos = url.find('-')
+    url = url[:pos] + '://' + url[pos+1:]
+    mirrored_url = transform_content.decodeUrl(url)
+    
+    base_url = re.search(r"/*([^/]+)", mirrored_url).group(1);
+    assert base_url
+    logging.info("Proxy serving request for '%s'", mirrored_url)
+
+    client = Client()
+    success = client.go(base_url, mirrored_url, self.request.body, self.request.headers)
+    if not success:
+      return self.error(404)
+  
+    cres = client.response
+    for key, value in cres.headers.iteritems():
+      if key not in IGNORE_HEADERS:
+        self.response.headers[key] = value
+    content = cres.content
+    if content:
+        logging.debug("Len: %dB", len(content))
+        self.response.out.write(content)
+    self.response.set_status(cres.status_code)
 
 
 app = webapp.WSGIApplication([
   (r"/", HomeHandler),
   (r"/main", HomeHandler),
-  (r"/[^/]+.*", MirrorHandler)
+  (r"/ps/.*", ProxyServerHandler),
+  (r"/.*", MirrorHandler)
 ], debug=DEBUG)
 
 
