@@ -7,9 +7,7 @@ import os
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
     
-import sys
 import gtk
-import threading
 import ConfigParser
 import signal
 

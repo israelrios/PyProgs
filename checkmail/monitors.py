@@ -6,34 +6,12 @@ import os
 import sys
 import gtk
 import gobject
-import email.header
-from imaplib import IMAP4, IMAP4_SSL
 import subprocess
 import threading
-import ConfigParser
+import syslog
 #proxyusage
-import urllib
-import urllib2
-import cookielib
-import mimetools
-import mimetypes
-import stat
 from HTMLParser import HTMLParser
 import re
-import time
-import locale
-import syslog
-
-#filtros para o lixo
-#imapcriteria = '(UNSEEN NOT FROM "divulgacao@celepar.pr.gov.br"' + \
-#    ' NOT FROM "funceladm@celepar.pr.gov.br"' + \
-#    ' NOT FROM "celtrans@celtrans.pr.gov.br"' + \
-#    ' NOT FROM "Atos Administrativos")'
-imapcriteria = '(UNSEEN (OR (OR (TO "israel.rios") (CC "israel.rios"))' + \
-    ' (FROM "alessandro.assumpcao"))' + \
-    ' NOT SUBJECT "FGP-T1"' + \
-    ' NOT SUBJECT "INFORMATIVO SINOR"' + \
-    ' NOT SUBJECT "SERPROS" NOT FROM "serpros")' # tem que estar entre parenteses pro imap lib não colocar entre aspas
 
 #Decorator para métodos que atualização a interface gráfica
 def gtkupdate(fn):
@@ -274,6 +252,8 @@ class Service(threading.Thread):
 
 class CheckMailService(Service):
     def __init__(self, app, user, passwd):
+        import email.header
+        from imaplib import IMAP4, IMAP4_SSL
         Service.__init__(self, app, user, passwd)
         self.haveNotify = False
         self.lastMsg = None
@@ -285,6 +265,23 @@ class CheckMailService(Service):
                 print "There was a problem initializing the pynotify module"
         except:
             print "You don't seem to have pynotify installed"
+        self.readConfig()
+    
+    def readConfig(self):
+        home = os.getenv('USERPROFILE') or os.getenv('HOME')
+        filename = os.path.join(home, ".checkmail.conf")
+        self.imapcriteria = "(UNSEEN)"
+        if os.path.exists(filename):
+            f = open(filename, 'r')
+            lines = []
+            try:
+                for line in f:
+                    line = line.strip()
+                    if not line.startswith('#'):
+                        lines.append(line)
+            finally:
+                f.close()
+            self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
     
     def showNotify(self, tip):
         loop = gobject.MainLoop ()
@@ -352,7 +349,7 @@ class CheckMailService(Service):
             try:
                 imap.select(readonly=True)
                 
-                typ, msgnums = imap.search("US-ASCII", imapcriteria)
+                typ, msgnums = imap.search("US-ASCII", self.imapcriteria)
             
                 self.parseError(typ, msgnums)
                 
@@ -410,6 +407,11 @@ class HtmlTextParser(HTMLParser):
 
 class ProxyUsageService(Service):
     def __init__(self, app, user, passwd):
+        import urllib
+        import urllib2
+        import cookielib
+        import time
+        import locale
         Service.__init__(self, app, user, passwd)
         # Os campos do formulário
         self.fields = {}
