@@ -9,7 +9,15 @@ import gobject
 import subprocess
 import threading
 import syslog
+#checkmail
+import email.header
+from imaplib import IMAP4, IMAP4_SSL
 #proxyusage
+import urllib
+import urllib2
+import cookielib
+import time
+import locale
 from HTMLParser import HTMLParser
 import re
 
@@ -252,8 +260,6 @@ class Service(threading.Thread):
 
 class CheckMailService(Service):
     def __init__(self, app, user, passwd):
-        import email.header
-        from imaplib import IMAP4, IMAP4_SSL
         Service.__init__(self, app, user, passwd)
         self.haveNotify = False
         self.lastMsg = None
@@ -407,11 +413,6 @@ class HtmlTextParser(HTMLParser):
 
 class ProxyUsageService(Service):
     def __init__(self, app, user, passwd):
-        import urllib
-        import urllib2
-        import cookielib
-        import time
-        import locale
         Service.__init__(self, app, user, passwd)
         # Os campos do formulário
         self.fields = {}
