@@ -20,10 +20,14 @@ appdir = os.path.dirname(sys.argv[0])
 dateformat = '%Y-%m-%d %H:%M:%S'
 
 def stringToDate(sDate, sDefaultTime):
-    if sDate.find(':') < 0:
-        sDate = sDate + ' ' + sDefaultTime
+    parts = sDate.split() #separate date and time
+    if len(parts) == 1:
+        parts.append(sDefaultTime)
+    else:
+        #completes the time part
+        parts[1] = parts[1] + sDefaultTime[len(parts[1]):len(sDefaultTime)]
     
-    return time.strptime(sDate, dateformat)
+    return time.strptime(" ".join(parts), dateformat)
 
 def showMessage(text, caption, parentWindow = None, type = gtk.MESSAGE_INFO):
     dlg = gtk.MessageDialog(parentWindow, gtk.DIALOG_MODAL, type, gtk.BUTTONS_OK, text)
@@ -316,9 +320,13 @@ class MergeDev:
         #sDateCommand = "-d\"%s<=%s\"" % (sStartDate, sEndDate)
         #command = "cvs log -S -N " + sDateCommand + " -r" + sourceBranch + " -w" + developer
         #console << kNormal << command << '\n'
+        if sourceBranch.upper() == 'HEAD':
+            optRev = '-b'
+        else:
+            optRev = "-r%s" % sourceBranch
         code, out, err = self.cvsRun("log", "-S", "-N",
                                  "-d%s<=%s" % (sStartDate, sEndDate),
-                                 "-r%s" % sourceBranch,
+                                 optRev, #TODO: when branch is HEAD the initial version may not be retrievied
                                  "-w%s" % developer,
                                  filename)
         if out == None:
