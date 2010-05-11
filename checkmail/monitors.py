@@ -267,6 +267,7 @@ class CheckMailService(Service):
             self.notify = __import__('pynotify') 
             if self.notify.init("Monitors"):
                 self.haveNotify = True
+                self.notifyCaps = self.notify.get_server_caps()
             else:
                 print "There was a problem initializing the pynotify module"
         except:
@@ -290,16 +291,19 @@ class CheckMailService(Service):
             self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
     
     def showNotify(self, tip):
-        loop = gobject.MainLoop ()
         iconname = 'file://' + os.path.join(curdir, 'mail-unread.png')
         n = self.notify.Notification("New Mail", tip, iconname)
         n.set_urgency(self.notify.URGENCY_NORMAL)
         n.set_timeout(10000) # 10 segundos
-        n.add_action("default", "Open Mail", self.onNotifyClick)
         n.attach_to_status_icon(self.getTrayIcon())
-        n.connect('closed', lambda sender: loop.quit())
-        n.show()
-        loop.run() #sem o loop não funciona a action da notificação
+        if "actions" in self.notifyCaps:
+          loop = gobject.MainLoop ()
+          n.connect('closed', lambda sender: loop.quit())
+          n.add_action("default", "Open Mail", self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
+          n.show()
+          loop.run() #sem o loop não funciona a action da notificação
+        else:
+          n.show()
         return False # pra não rodar novamente no caso de ser chamada por idle_add
         
     def onNotifyClick(self, n, action):

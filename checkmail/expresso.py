@@ -45,6 +45,9 @@ class ExpressoService(CheckMailService):
         
         msg = u"Delete %d messages from Expresso?" % msgcount
         if self.haveNotify:
+            if not "actions" in self.notifyCaps:
+                return True # se não suportar actions então nem mostra a notificação
+            
             self.delMsgUserResponse = False
             n = self.notify.Notification("Delete Messages?", msg, gtk.STOCK_DIALOG_QUESTION)
             n.set_urgency(self.notify.URGENCY_NORMAL)
