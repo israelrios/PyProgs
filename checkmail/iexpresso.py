@@ -165,6 +165,11 @@ class MultipartPostHandler(urllib2.BaseHandler):
 # Recent: flag
 
 class ExpressoMessage:
+    def checkFlag(self, flag):
+        if isinstance(flag, bool):
+          return flag
+        return flag.strip() != ''
+
     def __init__(self, values):
         try:
             if 'ContentType' in values:
@@ -193,18 +198,18 @@ class ExpressoMessage:
                     break
                 self.subject = newsubj
             self.size = int(values['Size'])
-            self.draft = 'Draft' in values and values['Draft'].strip() != ''
-            self.answered = 'Answered' in values and values['Answered'].strip() != ''
-            self.unread = values['Unseen'].strip() != '' or values['Recent'] == 'N'
-            self.deleted = values['Deleted'].strip() != ''
-            self.forwarded = 'Forwarded' in values and values['Forwarded'].strip() != ''
+            self.draft = 'Draft' in values and self.checkFlag(values['Draft'])
+            self.answered = 'Answered' in values and self.checkFlag(values['Answered'])
+            self.unread = self.checkFlag(values['Unseen']) or values['Recent'] == 'N'
+            self.deleted = self.checkFlag(values['Deleted'])
+            self.forwarded = 'Forwarded' in values and self.checkFlag(values['Forwarded'])
             #if self.full:
             #    log( values['Flagged'] )
             #    self.flagged = values['Flagged']
             #else:
-            self.flagged = values['Flagged'].strip() != ''
+            self.flagged = self.checkFlag(values['Flagged'])
             self.star = self.flagged
-            self.recent = values['Recent'].strip() != ''
+            self.recent = self.checkFlag(values['Recent'])
             
             if 'from' in values:
                 person = values['from']
