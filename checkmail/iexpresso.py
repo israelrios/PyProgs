@@ -630,6 +630,7 @@ class MailSynchronizer():
         self.dbpath = os.path.join( iexpressodir, 'msg.db' )
         self.deleteHandler = self
         self.client = None
+        self.patSubject = re.compile('[\r\n]\s*')
         
     def loginLocal(self):
         try:
@@ -795,14 +796,14 @@ class MailSynchronizer():
     def fixSubject(self, fullmsg):
         if fullmsg.has_key('Subject'):
             #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
-            dec = email.header.decode_header(fullmsg.get('Subject', ''))
+            dec = email.header.decode_header(self.patSubject.sub('', fullmsg.get('Subject', '')))
             subject = ''
             for item in dec:
                 if item[1] != None:
                     subject += item[0].decode(item[1]) + ' '
                 else:
                     subject += item[0] + ' '
-            fullmsg.replace_header('Subject', subject)
+            fullmsg.replace_header('Subject', subject.strip())
         
     def getDbId(self, fullmsg):
         #se não houver um Message-Id adiciona um gerado automaticamente
