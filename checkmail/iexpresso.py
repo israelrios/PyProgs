@@ -796,7 +796,7 @@ class MailSynchronizer():
     def fixSubject(self, fullmsg):
         if fullmsg.has_key('Subject'):
             #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
-            dec = email.header.decode_header(self.patSubject.sub('', fullmsg.get('Subject', '')))
+            dec = email.header.decode_header(self.patSubject.sub(' ', fullmsg.get('Subject', '')))
             subject = ''
             for item in dec:
                 if item[1] != None:
