@@ -14,6 +14,7 @@ import os
 import datetime
 import zipfile
 import time, random
+import traceback
 #import cPickle
 from htmlentitydefs import name2codepoint as n2cp
 from cStringIO import StringIO
@@ -49,6 +50,9 @@ def log(*params):
             f.write(str(p))
     f.write('\n')
     f.close()
+
+def logError():
+    log(traceback.format_exc())
 
 class IExpressoError(Exception):
     pass
@@ -102,9 +106,8 @@ class MultipartPostHandler(urllib2.BaseHandler):
                          v_files.append((key, value))
                      else:
                          v_vars.append((key, value))
-            except TypeError:
-                systype, value, traceback = sys.exc_info()
-                raise TypeError, "not a valid non-string sequence or mapping object", traceback
+            except TypeError, e:
+                raise TypeError("not a valid non-string sequence or mapping object: " + str(e))
 
             if len(v_files) == 0:
                 data = urllib.urlencode(v_vars, doseq)
@@ -405,8 +408,8 @@ class ExpressoManager:
         return str(url.read())
     
     def importMsgs(self, msgfolder, file):
-        url = self.opener.open(self.urlImportMsgs, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
-                                                    'countFiles': 1, 'file_1' : file})
+        url = self.openUrl(self.urlImportMsgs, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
+                                                    'countFiles': 1, 'file_1' : file}, True)
         #verifica se aconteceu algum erro
         result = self.callExpresso(self.urlGetReturnExecuteForm)
         if 'error' in result and result['error'].strip() != '':
@@ -884,25 +887,28 @@ class MailSynchronizer():
     
     def loadAllMsgs(self):
         log( '* Full refresh -', time.asctime() )
-        
-        localdb = self.initUpdate()
-        self.es.listFolders() # para atualizar o quota 
-        
         try:
-            importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
+            localdb = self.initUpdate()
+            self.es.listFolders() # para atualizar o quota 
             
-            curids = self.loadExpressoMessages('ALL', localdb, self.efolders)
-            
-            if not importedIds.isEmpty():
-                self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
-            
-            localdb = self.loadLocalMsgs() # carrega as novas mensagens que foram inseridas
-            
-            #remove as mensagens que não estão mais na caixa do expresso da caixa local
-            self.changeLocal(curids, localdb)
-        finally:
-            self.saveDb()
-            self.closeLocalFolder()    
+            try:
+                importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
+                
+                curids = self.loadExpressoMessages('ALL', localdb, self.efolders)
+                
+                if not importedIds.isEmpty():
+                    self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
+                
+                localdb = self.loadLocalMsgs() # carrega as novas mensagens que foram inseridas
+                
+                #remove as mensagens que não estão mais na caixa do expresso da caixa local
+                self.changeLocal(curids, localdb)
+            finally:
+                self.saveDb()
+                self.closeLocalFolder()
+        except:
+            logError()
+            raise
         log( 'OK' )
         
     def initUpdate(self):
@@ -921,20 +927,24 @@ class MailSynchronizer():
     def loadUnseen(self):
         log( '* Smart refresh -', time.asctime() )
         # somente mensagens não lidas são carregadas
-        if self.smartFolders == None:
-            self.smartFolders = self.es.getFoldersWithRules() # somente as pastas com regras são atualizadas
-            
-        localdb = self.initUpdate()
         try:
-            self.changeExpresso(localdb, doDelete=True) #seta os flags das mensagens no expresso
-            
-            self.loadExpressoMessages('UNSEEN', localdb, self.smartFolders)
-            
-            #if not importedIds.isEmpty():
-            #    self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
-        finally:
-            self.saveDb()
-            self.closeLocalFolder()
+            if self.smartFolders == None:
+                self.smartFolders = self.es.getFoldersWithRules() # somente as pastas com regras são atualizadas
+                
+            localdb = self.initUpdate()
+            try:
+                self.changeExpresso(localdb, doDelete=True) #seta os flags das mensagens no expresso
+                
+                self.loadExpressoMessages('UNSEEN', localdb, self.smartFolders)
+                
+                #if not importedIds.isEmpty():
+                #    self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
+            finally:
+                self.saveDb()
+                self.closeLocalFolder()
+        except:
+            logError()
+            raise
         log( 'OK' )
     
     def closeLocalFolder(self):

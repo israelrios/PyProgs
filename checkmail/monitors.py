@@ -9,6 +9,7 @@ import gobject
 import subprocess
 import threading
 import syslog
+import traceback
 #checkmail
 import email.header
 from imaplib import IMAP4, IMAP4_SSL
@@ -28,9 +29,11 @@ def gtkupdate(fn):
     try:
         gtk.gdk.threads_enter()
         return func
-        gtk.gdk.flush()
     finally:
-        gtk.gdk.threads_leave()
+        try:
+            gtk.gdk.flush()
+        finally:
+            gtk.gdk.threads_leave()
 
 def execute(cmd):
     pid = os.fork()
@@ -113,7 +116,6 @@ class TrayIcon(gtk.StatusIcon):
         mi.connect('activate', handler)
         return mi
 
-    @gtkupdate
     def onPopupMenu(self, status_icon, button, activate_time):
         menu = gtk.Menu()
         menu.append(self.createMenuItem(gtk.STOCK_QUIT, self.onMenuExit))
@@ -143,7 +145,6 @@ class ProxyUsageTrayIcon(TrayIcon):
         self.percent = 0
         self.icon = IconBar(22, self.percent)
 
-    @gtkupdate
     def onSizeChanged(self, object, size):
         self.icon = IconBar(size, self.percent)
         if self.get_visible():
@@ -229,7 +230,7 @@ class Service(threading.Thread):
             self.runService(timered)
             return True
         except Exception, e:
-            syslog.syslog(syslog.LOG_USER | syslog.LOG_ERR, str(e))
+            syslog.syslog(syslog.LOG_USER | syslog.LOG_ERR, traceback.format_exc(8))
             if timered :
                 self.getTrayIcon().setError(str(e))
                 return True # se retornar False o timer para

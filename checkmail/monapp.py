@@ -10,6 +10,8 @@ if 'http_proxy' in os.environ:
 import gtk
 import ConfigParser
 import signal
+import syslog
+import gobject
 
 import siscop
 import expresso
@@ -320,15 +322,19 @@ class App:
 
 def main():
     global app
+    gobject.threads_init() 
+    gtk.gdk.threads_init()
+    syslog.openlog('monitors')
     app = App()
     signal.signal(signal.SIGINT, app.handlesigterm)
     signal.signal(signal.SIGTERM, app.handlesigterm)
     signal.signal(signal.SIGHUP, app.handlesigterm)
-    gtk.gdk.threads_init()
     try:
         app.handleGnomeSession()
+        gtk.gdk.threads_enter()
         gtk.main()
     finally:
+        gtk.gdk.threads_leave()
         app.quit(True)
 
 if __name__ == '__main__':
