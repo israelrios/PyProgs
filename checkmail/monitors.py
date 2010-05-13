@@ -291,7 +291,7 @@ class CheckMailService(Service):
             self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
     
     def showNotify(self, tip):
-        iconname = 'file://' + os.path.join(curdir, 'mail-unread.png')
+        iconname = 'file://' + os.path.join(curdir, 'mail-unread.svg')
         n = self.notify.Notification("New Mail", tip, iconname)
         n.set_urgency(self.notify.URGENCY_NORMAL)
         n.set_timeout(10000) # 10 segundos
