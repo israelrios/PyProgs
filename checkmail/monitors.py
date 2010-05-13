@@ -129,7 +129,6 @@ class TrayIcon(gtk.StatusIcon):
         self.set_tooltip(error)
         self.set_visible(True)
 
-    @gtkupdate
     def destroy(self):
         self.set_visible(False)
 
