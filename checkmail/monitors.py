@@ -370,7 +370,7 @@ class CheckMailService(Service):
                     self.parseError(typ, msgs)
                     for m in msgs:
                         if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
-                            #Extraí o subject e decodifica o texto
+                            #Extrai o subject e decodifica o texto
                             dec = email.header.decode_header(m[1].strip('Subject:').strip())
                             subject = []
                             for item in dec:
