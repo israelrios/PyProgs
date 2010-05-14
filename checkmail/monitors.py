@@ -372,13 +372,13 @@ class CheckMailService(Service):
                         if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
                             #Extraí o subject e decodifica o texto
                             dec = email.header.decode_header(m[1].strip('Subject:').strip())
-                            subject = ''
+                            subject = []
                             for item in dec:
                                 if item[1] != None:
-                                    subject += item[0].decode(item[1]) + ' '
+                                    subject.append(item[0].decode(item[1]))
                                 else:
-                                    subject += item[0] + ' '
-                            subjects.append(subject)
+                                    subject.append(item[0])
+                            subjects.append(''.join(subject))
             finally:
                 imap.close()
                 imap.logout()
