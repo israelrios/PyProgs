@@ -861,12 +861,17 @@ class MailSynchronizer():
             if len(todownload) + len(todownloadEx) > 0:
                 if len(todownload) > 0:
                     newmsgs = self.es.getFullMsgs(folder_id, ','.join([str(key) for key in todownload.keys()]))
+                    if newmsgs == None:
+                        #download falhou, faz o download de todas as mensagens pelo modo especial
+                        todownloadEx.update(todownload)
+                        newmsgs = {}
                 else:
                     newmsgs = {}
                 #faz o download das mensagens especiais individualmente
                 for eid, eflags in todownloadEx.items():
                     msgsrc = self.es.getFullMsgEspecial(folder_id, eid)
                     if msgsrc:
+                        log( 'Getting message using alternative way:', eid )
                         newmsgs[eid] = msgsrc
                         todownload[eid] = eflags
                 #importa as mensagens no banco
