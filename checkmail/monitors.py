@@ -22,19 +22,6 @@ import locale
 from HTMLParser import HTMLParser
 import re
 
-#Decorator para métodos que atualização a interface gráfica
-def gtkupdate(fn):
-    def func(*args):
-        return fn(*args)
-    try:
-        gtk.gdk.threads_enter()
-        return func
-    finally:
-        try:
-            gtk.gdk.flush()
-        finally:
-            gtk.gdk.threads_leave()
-
 def execute(cmd):
     pid = os.fork()
     if pid == 0:
@@ -123,7 +110,6 @@ class TrayIcon(gtk.StatusIcon):
         menu.show_all()
         menu.popup(None, None, None, button, activate_time)
 
-    @gtkupdate
     def setError(self, error):
         self.set_from_stock('gtk-dialog-error')
         self.set_tooltip(error)
@@ -132,9 +118,8 @@ class TrayIcon(gtk.StatusIcon):
     def destroy(self):
         self.set_visible(False)
 
-    @gtkupdate
     def set_visible(self, visible):
-        if self.service.isAlive():
+        if self.service.started:
             gtk.StatusIcon.set_visible(self, visible)
 
 class ProxyUsageTrayIcon(TrayIcon):
@@ -149,7 +134,6 @@ class ProxyUsageTrayIcon(TrayIcon):
         if self.get_visible():
             self.set_from_pixbuf(self.icon)
 
-    @gtkupdate
     def setIcon(self, percent, tip):
         self.percent = percent
         self.icon.update(percent)
@@ -161,7 +145,6 @@ class CheckMailTrayIcon(TrayIcon):
     def onActivate(self, event):
         self.service.showMail();
 
-    @gtkupdate
     def setIcon(self, hasmail, tip):
         if hasmail:
             iconname = 'mail-unread.png'
@@ -190,16 +173,27 @@ class Service(threading.Thread):
 
     def __init__(self, app, user, passwd):
         threading.Thread.__init__(self)
+        self.started = False
         self.app = app
         self.user = user
         self.passwd = passwd
         self.goEvent = threading.Event()
         self.setDaemon(True) # se a thread principal terminar esta thread será finalizada
+    
+    def setIconVisible(self, visible):
+        gobject.idle_add(lambda: self.getTrayIcon().set_visible(visible))
+        
+    def setIconError(self, error):
+        gobject.idle_add(lambda: self.getTrayIcon().set_error(error))
+        
+    def setIcon(self, *args):
+        gobject.idle_add(lambda: self.getTrayIcon().setIcon(*args))
 
     def run(self):
         try:
+            self.started = True
             if not self.terminated:
-                self.getTrayIcon().set_visible(True)
+                self.setIconVisible(True)
                 self._refresh(False)
             while not self.terminated:
                 self.goEvent.wait(self.refreshMinutes * 60) #em segundos
@@ -208,13 +202,16 @@ class Service(threading.Thread):
                 self._refresh(not self.goEvent.isSet())
                 self.goEvent.clear()
         finally:
-            if self._trayicon != None:
-                self._trayicon.destroy()
-                self._trayicon = None
+            gobject.idle_add(self.destroyTrayIcon)
             self.onQuit();
 
             self.app.serviceQuit(self)
-
+    
+    def destroyTrayIcon(self):
+        if self._trayicon != None:
+            self._trayicon.destroy()
+            self._trayicon = None
+            
     def onQuit(self):
         pass
 
@@ -231,19 +228,15 @@ class Service(threading.Thread):
         except Exception, e:
             syslog.syslog(syslog.LOG_USER | syslog.LOG_ERR, traceback.format_exc(8))
             if timered :
-                self.getTrayIcon().setError(str(e))
+                self.setIconError(str(e))
                 return True # se retornar False o timer para
-            mustLock = self == threading.currentThread()
-            try:
-                if mustLock: gtk.gdk.threads_enter()
-                showMessage(str(e), "Error", type=gtk.MESSAGE_ERROR)
-                if mustLock: gtk.gdk.flush()
-            finally:
-                if mustLock: gtk.gdk.threads_leave()
+            errortext = str(e)
+            gobject.idle_add(lambda: showMessage(errortext, "Error", type=gtk.MESSAGE_ERROR))
             return False
         return True
 
     def getTrayIcon(self):
+        """ Must be called from main thread. Use gobject.idle_add """
         if self._trayicon == None:
             self._trayicon = self.createTrayIcon()
         return self._trayicon
@@ -291,6 +284,9 @@ class CheckMailService(Service):
             self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
     
     def showNotify(self, tip):
+        gobject.idle_add(self.idleShowNotify, tip)
+    
+    def idleShowNotify(self, tip):
         iconname = 'file://' + os.path.join(curdir, 'mail-unread.svg')
         n = self.notify.Notification("New Mail", tip, iconname)
         n.set_urgency(self.notify.URGENCY_NORMAL)
@@ -337,11 +333,10 @@ class CheckMailService(Service):
             tip = '* ' + '\n* '.join(subjects)
         else:
             tip = 'No new email'
-        self.getTrayIcon().setIcon(hasmail, self.processTip(subjects, tip))
+        self.setIcon(hasmail, self.processTip(subjects, tip))
         
         if self.haveNotify:
             if timered and hasmail and self.lastMsg != tip:
-                #gobject.idle_add(self.showNotify, tip)
                 self.showNotify(tip)
             self.lastMsg = tip
     
@@ -442,7 +437,7 @@ class ProxyUsageService(Service):
         percent = float(pu[3])
         texto = u"Proxy usage: %s%sB (%s%%)  %s" % \
             (locale.str(bytes), pu[2], locale.str(percent), pu[0])
-        self.getTrayIcon().setIcon(percent, texto)
+        self.setIcon(percent, texto)
 
     ###########################################################
     # Extrai o texto do HTML e separa a informação do consumo

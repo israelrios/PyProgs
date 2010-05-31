@@ -260,10 +260,7 @@ class App:
         for t in self.services:
             if t.running():
                 return
-        try:
-            gtk.main_quit()
-        except:
-            pass # gtk.main_quit pode dar uma exceção se estiver fora do mainloop
+        gobject.idle_add(gtk.main_quit)
 
     def quit(self, wait = True):
         running = False
@@ -322,8 +319,8 @@ class App:
 
 def main():
     global app
-    gobject.threads_init() 
-    gtk.gdk.threads_init()
+    gobject.threads_init()
+    #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
     syslog.openlog('monitors')
     app = App()
     signal.signal(signal.SIGINT, app.handlesigterm)
@@ -331,10 +328,8 @@ def main():
     signal.signal(signal.SIGHUP, app.handlesigterm)
     try:
         app.handleGnomeSession()
-        gtk.gdk.threads_enter()
         gtk.main()
     finally:
-        gtk.gdk.threads_leave()
         app.quit(True)
 
 if __name__ == '__main__':

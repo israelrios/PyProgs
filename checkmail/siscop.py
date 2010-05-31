@@ -2,7 +2,7 @@
 # Autor: Israel Rios
 # Created: 15-abr-2009
 
-from monitors import Service, HtmlTextParser, TrayIcon, gtkupdate, curdir, execute
+from monitors import Service, HtmlTextParser, TrayIcon, curdir, execute
 
 import os
 import urllib
@@ -19,7 +19,6 @@ class SisCopTrayIcon(TrayIcon):
     def onActivate(self, event):
         self.service.showPage()
 
-    @gtkupdate
     def setIcon(self, ok):
         if ok:
             iconname = 'siscop_idle.png'
@@ -60,15 +59,16 @@ class SisCopService(Service):
     def runService(self, timered=True):
         #o valor de refreshMinutos pode ser alterado em self.check()
         self.refreshMinutes = 55 # não tem necessidade de estressar o servidor
-        self.getTrayIcon().setIcon(self.check())
+        self.setIcon(self.check())
 
     def showPage(self):
         #abre o browser com a página
         execute(["firefox", self.urlSisCop])
+        execute(["wmctrl", "-a", "Firefox"])
 
     def onTimer(self):
         mustShowPage = self.timer != None
-        #self.getTrayIcon().setIcon(not self.timer != None)
+        #self.setIcon(not self.timer != None)
         self.timer = None
         
         if not mustShowPage:
@@ -76,6 +76,7 @@ class SisCopService(Service):
             bus = dbus.SessionBus()
             ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
             mustShowPage = not ssaver.GetSessionIdle()
+            ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
         
         if mustShowPage:
             self.showPage()
