@@ -27,8 +27,11 @@ def execute(cmd):
     if pid == 0:
         # To become the session leader of this new session and the process group
         # leader of the new process group, we call os.setsid().
-        os.setsid()
-        subprocess.Popen(cmd, close_fds=True)
+        try:
+            os.setsid()
+            subprocess.Popen(cmd, close_fds=True)
+        except:
+            pass #ignore exceptions
         os._exit(os.EX_OK)
     else:
         os.waitpid(pid, 0)
