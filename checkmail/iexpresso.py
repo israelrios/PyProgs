@@ -633,7 +633,6 @@ class MailSynchronizer():
         self.dbpath = os.path.join( iexpressodir, 'msg.db' )
         self.deleteHandler = self
         self.client = None
-        self.patSubject = re.compile(r'\r\n\t?')
         
     def loginLocal(self):
         try:
@@ -800,11 +799,12 @@ class MailSynchronizer():
         if fullmsg.has_key('Subject'):
             #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
             # "unfolding" do subject
-            parts = self.patSubject.split(fullmsg.get('Subject', ''))
+            parts = fullmsg.get('Subject', '').split('\r\n')
             subject = []
             for part in parts:
-                if part.startswith('=?'):
+                if part.startswith('\t'):
                     subject.append(' ') #python bug, must have a space
+                    part = part[1:]
                 subject.append(part)
             dec = email.header.decode_header(''.join(subject))
             subject = []
@@ -813,7 +813,9 @@ class MailSynchronizer():
                     subject.append(item[0].decode(item[1]))
                 else:
                     subject.append(item[0])
-            fullmsg.replace_header('Subject', ''.join(subject))
+            #log(''.join(subject))
+            hsubject = email.header.Header(''.join(subject), continuation_ws=' ')
+            fullmsg.replace_header('Subject', hsubject)
         
     def getDbId(self, fullmsg):
         #se não houver um Message-Id adiciona um gerado automaticamente
