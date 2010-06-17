@@ -633,6 +633,7 @@ class MailSynchronizer():
         self.dbpath = os.path.join( iexpressodir, 'msg.db' )
         self.deleteHandler = self
         self.client = None
+        self.curday = 0
         
     def loginLocal(self):
         try:
@@ -647,8 +648,8 @@ class MailSynchronizer():
         self.user = user
         self.password = password
         self.checkPreConditions()
-        self.firstTime = True
         self.es = ExpressoManager(user, password)
+        self.curday = 0
         self.loginLocal()
         self.es.doLogin()
         self.db = self.loadDb()
@@ -931,10 +932,12 @@ class MailSynchronizer():
         localdb = self.loadLocalMsgs()
         self.checkSignature(localdb)
         
-        if self.firstTime:
+        day = int(time.time()) / (60 * 60 * 24) # o número de dias desde a época (1-1-1970)
+        
+        if day != self.curday: # verifica se o dia mudou desde a última iteração
+            self.curday = day
             self.syncFolders()
             self.es.autoClean(7) # remove da lixeira mensagens mais antigas que 7 dias
-            self.firstTime = False
             
         return localdb
         
