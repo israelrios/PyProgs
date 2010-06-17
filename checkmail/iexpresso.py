@@ -598,7 +598,7 @@ class MsgList():
         del self.db[id]
     
     def save(self, file):
-        file.write("2\n") # versão
+        file.write("3\n") # versão
         file.write(self.signature.encode('utf-8'))
         file.write('\n')
         for id, msg in self.db.items():
@@ -614,7 +614,7 @@ class MsgList():
     
     def load(self, file):
         line = file.readline().strip()
-        if line != '2':
+        if line != '3':
             log( line )
             raise IExpressoError('DB file with wrong version.')
         self.signature = file.readline().strip()
@@ -634,6 +634,8 @@ class MailSynchronizer():
         self.deleteHandler = self
         self.client = None
         self.curday = 0
+        self.patSender = re.compile('^Sender:\s*(.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+        self.patMessageId = re.compile('^Message-Id:\s*(.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
         
     def loginLocal(self):
         try:
@@ -660,7 +662,7 @@ class MailSynchronizer():
         self.logoutLocal()
     
     def logoutLocal(self):
-        if hasattr(self, 'client'):
+        if hasattr(self, 'client') and self.client != None:
             self.closeLocalFolder()
             self.client.logout()
     
@@ -751,7 +753,6 @@ class MailSynchronizer():
         self.closeLocalFolder()
         self.localFolders = self.getLocalFolders()
         localdb = MsgList()
-        lenmid = len('Message-Id:')
         for folder in self.localFolders:
             for tryNum in range(2):
                 self.client.select(folder.encode('imap4-utf-7'), True)
@@ -761,7 +762,7 @@ class MailSynchronizer():
                 lenmsgs = len(msgnums[0].split())
                 msgcount = 0
                 if len(msgnums) > 0 and lenmsgs > 0:    
-                    typ, msgs = self.client.fetch( msgnums[0].replace(' ', ',') , '(FLAGS BODY[HEADER.FIELDS (Message-Id)])')
+                    typ, msgs = self.client.fetch( msgnums[0].replace(' ', ',') , '(FLAGS BODY[HEADER.FIELDS (Message-Id Sender)])')
                     checkImapError(typ, msgs)
                     for m in msgs:
                         if m != ')' and isinstance(m, tuple):
@@ -769,12 +770,17 @@ class MailSynchronizer():
                                 localid = int(m[0][:m[0].index('(')])
                                 flags = imaplib.ParseFlags(m[0])
                                 #extrai o Message-ID
-                                mid = m[1]
-                                if not mid.lower().startswith('message-id:'):
+                                headers = m[1]
+                                moId = self.patMessageId.search(headers)
+                                if moId == None:
                                     raise IExpressoError('Error loading local messages.')
-                                dbid = mid[lenmid:].strip()
+                                dbid = moId.group(1).strip()
                                 if dbid == '':
                                     raise IExpressoError('Error loading local messages.')
+                                #if Sender exists put it in the dbid
+                                moSender = self.patSender.search(headers)
+                                if moSender != None:
+                                    dbid += moSender.group(1).strip()
                                 # o flag unseen nem sempre é retornado
                                 if not (r'\Seen' in flags or r'\Unseen' in flags):
                                     flags += (r'\Unseen',)
@@ -821,9 +827,10 @@ class MailSynchronizer():
     def getDbId(self, fullmsg):
         #se não houver um Message-Id adiciona um gerado automaticamente
         if fullmsg.has_key('Message-Id'):
-            return fullmsg['Message-Id']
+            return fullmsg['Message-Id'] + fullmsg.get('Sender', '').strip()
         else:
             hashid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
+            hashid += fullmsg.get('Sender', '').strip()
             fullmsg.add_header('Message-Id', hashid)
             return hashid
     
@@ -1035,7 +1042,13 @@ class MailSynchronizer():
             self.createFolderExpresso(folder)
             self.es.importMsgs(folder, msgfile)
             #procura o id da mensagem importada
-            msgs = self.es.getMsgs('RECENT TEXT "Message-ID: %s"' % dbid, folder) # essa busca não é sensível a casa e nem a espaços
+            moId = self.patMessageId.search(msgheader)
+            if moId == None:
+                msgid = dbid #nem sempre o dbid é igual ao MESSAGE-ID
+            else:
+                msgid = moId.group(1).strip()
+                log('Searching Message-ID:', msgid) 
+            msgs = self.es.getMsgs('RECENT TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços
             if len(msgs) == 1:
                 msg = msgs[0]
                 self.db.update(dbid, msg.id, folder, msg.getFlags())
