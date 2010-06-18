@@ -939,7 +939,7 @@ class MailSynchronizer():
         localdb = self.loadLocalMsgs()
         self.checkSignature(localdb)
         
-        day = int(time.time()) / (60 * 60 * 24) # o número de dias desde a época (1-1-1970)
+        day = datetime.date.today().toordinal() # o número de dias desde 1-1-1
         
         if day != self.curday: # verifica se o dia mudou desde a última iteração
             self.curday = day
