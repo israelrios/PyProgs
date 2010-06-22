@@ -196,8 +196,9 @@ class Service(threading.Thread):
         try:
             self.started = True
             if not self.terminated:
-                self.setIconVisible(True)
                 self._refresh(False)
+                if not self.terminated:
+                    self.setIconVisible(True)
             while not self.terminated:
                 self.goEvent.wait(self.refreshMinutes * 60) #em segundos
                 if self.terminated:
