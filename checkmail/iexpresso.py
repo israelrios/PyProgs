@@ -907,8 +907,7 @@ class MailSynchronizer():
     def loadAllMsgs(self):
         log( '* Full refresh -', time.asctime() )
         try:
-            localdb = self.initUpdate()
-            self.es.listFolders() # para atualizar o quota 
+            localdb = self.initUpdate() 
             
             try:
                 importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
@@ -925,6 +924,8 @@ class MailSynchronizer():
             finally:
                 self.saveDb()
                 self.closeLocalFolder()
+            
+            self.es.listFolders() # para atualizar a quota
         except:
             logError()
             raise
