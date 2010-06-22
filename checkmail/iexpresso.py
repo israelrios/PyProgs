@@ -254,9 +254,7 @@ class ExpressoMessage:
         flags = []
         if self.answered:
             flags.append(r'\Answered')
-        if self.unread:
-            flags.append(r'\Unseen')
-        else:
+        if not self.unread:
             flags.append(r'\Seen')
         if self.deleted:
             flags.append(r'\Deleted')
@@ -667,7 +665,7 @@ class MailSynchronizer():
             self.client.logout()
     
     def getLocalFolders(self):
-        (typ, list) = self.client.list('INBOX')
+        (typ, list) = self.client.list('""', '*')
         checkImapError(typ, list)
         lst = []
         for item in list:
@@ -781,9 +779,8 @@ class MailSynchronizer():
                                 moSender = self.patSender.search(headers)
                                 if moSender != None:
                                     dbid += moSender.group(1).strip()
-                                # o flag unseen nem sempre é retornado
-                                if not (r'\Seen' in flags or r'\Unseen' in flags):
-                                    flags += (r'\Unseen',)
+                                if r'\Unseen' in flags:
+                                    flags -= (r'\Unseen',)
                                 localdb.add(dbid, localid, folder, '(' + ' '.join(flags) + ')')
                                 msgcount += 1
                             except:
@@ -1008,6 +1005,9 @@ class MailSynchronizer():
                         if r'\Unseen' in diff:
                             del diff[diff.index(r'\Unseen')]
                             self.client.store(str(msgid), '-FLAGS', r'\Seen')
+                        if r'\Unflagged' in diff:
+                            del diff[diff.index(r'\Unflagged')]
+                            self.client.store(str(msgid), '-FLAGS', r'\Flagged')
                         if len(diff) > 0:
                             self.client.store(str(msgid), '+FLAGS', ' '.join(diff))
                         self.closeLocalFolder()
@@ -1170,26 +1170,33 @@ class MailSynchronizer():
         return importedIds
     
     def mapFlagsExpresso(self, toflag, eid, efolder, eflags, diff):
+        newflags = set(eflags[1:-1].split())
         if efolder in toflag:
             flags = toflag[efolder]
         else:
-            flags = {'seen': [], 'unseen': [], 'answered': [], 'forwarded': []}
+            flags = {'seen': [], 'unseen': [], 'answered': [], 'forwarded': [], 'flagged': [], 'unflagged': []}
             toflag[efolder] = flags
         if r'\Seen' in diff:
             flags['seen'].append(eid)
-            eflags = eflags.replace(r'\Unseen', r'\Seen')
+            newflags.add(r'\Seen')
         if r'\Unseen' in diff:
             flags['unseen'].append(eid)
-            eflags = eflags.replace(r'\Seen', r'\Unseen')
+            if r'\Seen' in newflags:
+                newflags.remove(r'\Seen')
         if r'\Answered' in diff:
             flags['answered'].append(eid)
-            if eflags.find(r'\Answered') < 0:
-                eflags = eflags[:-1] + r' \Answered)'
+            newflags.add(r'\Answered')
+        if r'\Flagged' in diff:
+            flags['flagged'].append(eid)
+            newflags.add(r'\Flagged')
+        if r'\Unflagged' in diff:
+            flags['unflagged'].append(eid)
+            if r'\Flagged' in newflags:
+                newflags.remove(r'\Flagged')
         if r'$Forwarded' in diff:
             flags['forwarded'].append(eid)
-            if eflags.find(r'$Forwarded') < 0:
-                eflags = eflags[:-1] + r' $Forwarded)'
-        return eflags
+            newflags.add(r'$Forwarded')
+        return '(' + ' '.join(newflags) + ')'
 
     def flagsdiff(self, sflags1, sflags2):
         flags1 = sflags1[1:-1].split()
@@ -1198,6 +1205,10 @@ class MailSynchronizer():
         for f1 in flags1:
             if f1 != '\\Recent' and f1 != '\\Deleted' and not f1 in flags2:
                 diff.append(f1)
+        if r'\Seen' in flags2 and not r'\Seen' in flags1:
+            diff.append(r'\Unseen')
+        if r'\Flagged' in flags2 and not r'\Flagged' in flags1:
+            diff.append(r'\Unflagged')
         return diff
         
     
