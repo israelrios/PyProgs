@@ -117,6 +117,11 @@ class TrayIcon(gtk.StatusIcon):
         self.set_from_stock('gtk-dialog-error')
         self.set_tooltip(error)
         self.set_visible(True)
+    
+    def setInitialIcon(self):
+        self.set_from_stock('gtk-execute')
+        self.set_tooltip("Loading - " + self.service.name)
+        self.set_visible(True)
 
     def destroy(self):
         self.set_visible(False)
@@ -182,9 +187,10 @@ class Service(threading.Thread):
         self.passwd = passwd
         self.goEvent = threading.Event()
         self.setDaemon(True) # se a thread principal terminar esta thread será finalizada
+        self.name = self.__class__.__name__
     
-    def setIconVisible(self, visible):
-        gobject.idle_add(lambda: self.getTrayIcon().set_visible(visible))
+    def setInitialIcon(self):
+        gobject.idle_add(lambda: self.getTrayIcon().setInitialIcon())
         
     def setIconError(self, error):
         gobject.idle_add(lambda: self.getTrayIcon().set_error(error))
@@ -196,9 +202,8 @@ class Service(threading.Thread):
         try:
             self.started = True
             if not self.terminated:
+                self.setInitialIcon()
                 self._refresh(False)
-                if not self.terminated:
-                    self.setIconVisible(True)
             while not self.terminated:
                 self.goEvent.wait(self.refreshMinutes * 60) #em segundos
                 if self.terminated:
