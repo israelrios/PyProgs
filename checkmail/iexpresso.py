@@ -827,8 +827,8 @@ class MailSynchronizer():
             return fullmsg['Message-Id'] + fullmsg.get('Sender', '').strip()
         else:
             hashid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
-            hashid += fullmsg.get('Sender', '').strip()
             fullmsg.add_header('Message-Id', hashid)
+            hashid += fullmsg.get('Sender', '').strip()
             return hashid
     
     def strmsg(self, msg):
