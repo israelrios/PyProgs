@@ -382,7 +382,7 @@ class CheckMailService(Service):
                                     subject.append(item[0].decode(item[1]))
                                 else:
                                     subject.append(item[0])
-                            subjects.append(''.join(subject))
+                            subjects.append(' '.join(subject))
             finally:
                 imap.close()
                 imap.logout()

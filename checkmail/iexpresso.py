@@ -817,8 +817,8 @@ class MailSynchronizer():
                     subject.append(item[0].decode(item[1]))
                 else:
                     subject.append(item[0])
-            #log(''.join(subject))
-            hsubject = email.header.Header(''.join(subject), continuation_ws=' ')
+            #log(' '.join(subject))
+            hsubject = email.header.Header(' '.join(subject), continuation_ws=' ')
             fullmsg.replace_header('Subject', hsubject)
         
     def getDbId(self, fullmsg):
