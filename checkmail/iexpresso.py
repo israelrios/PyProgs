@@ -5,6 +5,8 @@
 
 import imap4utf7 # pro codec imap4-utf-7
 
+from monitors import decode_header
+
 import sys
 import urllib
 import urllib2
@@ -632,8 +634,8 @@ class MailSynchronizer():
         self.deleteHandler = self
         self.client = None
         self.curday = 0
-        self.patSender = re.compile('^Sender:\s*(.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
-        self.patMessageId = re.compile('^Message-Id:\s*(.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+        self.patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+        self.patMessageId = re.compile('^Message-Id: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
         
     def loginLocal(self):
         try:
@@ -778,7 +780,7 @@ class MailSynchronizer():
                                 #if Sender exists put it in the dbid
                                 moSender = self.patSender.search(headers)
                                 if moSender != None:
-                                    dbid += moSender.group(1).strip()
+                                    dbid += decode_header(moSender.group(1)).strip()
                                 if r'\Unseen' in flags:
                                     flags -= (r'\Unseen',)
                                 localdb.add(dbid, localid, folder, '(' + ' '.join(flags) + ')')
@@ -803,32 +805,20 @@ class MailSynchronizer():
         if fullmsg.has_key('Subject'):
             #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
             # "unfolding" do subject
-            parts = fullmsg.get('Subject', '').split('\r\n')
-            subject = []
-            for part in parts:
-                if part.startswith('\t'):
-                    subject.append(' ') #python bug, must have a space
-                    part = part[1:]
-                subject.append(part)
-            dec = email.header.decode_header(''.join(subject))
-            subject = []
-            for item in dec:
-                if item[1] != None:
-                    subject.append(item[0].decode(item[1]))
-                else:
-                    subject.append(item[0])
-            #log(' '.join(subject))
-            hsubject = email.header.Header(' '.join(subject), continuation_ws=' ')
+            subject = decode_header(fullmsg.get('Subject', ''))
+            #log(subject)
+            hsubject = email.header.Header(subject, continuation_ws=' ')
             fullmsg.replace_header('Subject', hsubject)
         
     def getDbId(self, fullmsg):
         #se não houver um Message-Id adiciona um gerado automaticamente
+        sender = decode_header(fullmsg.get('Sender', '').strip())
         if fullmsg.has_key('Message-Id'):
-            return fullmsg['Message-Id'] + fullmsg.get('Sender', '').strip()
+            return fullmsg['Message-Id'] + sender
         else:
             hashid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
             fullmsg.add_header('Message-Id', hashid)
-            hashid += fullmsg.get('Sender', '').strip()
+            hashid += sender
             return hashid
     
     def strmsg(self, msg):

@@ -260,6 +260,22 @@ class Service(threading.Thread):
 #################################################################
 # CheckMail
 
+patHeader = re.compile('\r\n[t ]')
+def decode_header(header):
+    text = []
+    lastAscii = None
+    dec = email.header.decode_header(patHeader.sub(' ', header.rstrip('\r\n')))
+    for item in dec:
+        curAscii = item[1] == None
+        if lastAscii != None and lastAscii != curAscii:
+            text.append(' ')
+        if curAscii:
+            text.append(item[0])
+        else:
+            text.append(item[0].decode(item[1]))
+        lastAscii = curAscii
+    return ''.join(text)
+
 class CheckMailService(Service):
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
@@ -375,14 +391,7 @@ class CheckMailService(Service):
                     for m in msgs:
                         if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
                             #Extrai o subject e decodifica o texto
-                            dec = email.header.decode_header(m[1].strip('Subject:').strip())
-                            subject = []
-                            for item in dec:
-                                if item[1] != None:
-                                    subject.append(item[0].decode(item[1]))
-                                else:
-                                    subject.append(item[0])
-                            subjects.append(' '.join(subject))
+                            subjects.append(decode_header(m[1].strip('Subject:').strip()))
             finally:
                 imap.close()
                 imap.logout()
