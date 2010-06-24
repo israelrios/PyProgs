@@ -193,7 +193,7 @@ class Service(threading.Thread):
         gobject.idle_add(lambda: self.getTrayIcon().setInitialIcon())
         
     def setIconError(self, error):
-        gobject.idle_add(lambda: self.getTrayIcon().set_error(error))
+        gobject.idle_add(lambda: self.getTrayIcon().setError(error))
         
     def setIcon(self, *args):
         gobject.idle_add(lambda: self.getTrayIcon().setIcon(*args))
