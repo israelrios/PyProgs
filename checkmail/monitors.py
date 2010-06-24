@@ -126,9 +126,6 @@ class TrayIcon(gtk.StatusIcon):
     def destroy(self):
         self.set_visible(False)
 
-    def set_visible(self, visible):
-        if self.service.started:
-            gtk.StatusIcon.set_visible(self, visible)
 
 class ProxyUsageTrayIcon(TrayIcon):
     def __init__(self, service):
@@ -181,7 +178,6 @@ class Service(threading.Thread):
 
     def __init__(self, app, user, passwd):
         threading.Thread.__init__(self)
-        self.started = False
         self.app = app
         self.user = user
         self.passwd = passwd
@@ -190,17 +186,19 @@ class Service(threading.Thread):
         self.name = self.__class__.__name__
     
     def setInitialIcon(self):
-        gobject.idle_add(lambda: self.getTrayIcon().setInitialIcon())
+        if not self.terminated and self.isAlive():
+            gobject.idle_add(lambda: self.getTrayIcon().setInitialIcon())
         
     def setIconError(self, error):
-        gobject.idle_add(lambda: self.getTrayIcon().setError(error))
+        if not self.terminated and self.isAlive():
+            gobject.idle_add(lambda: self.getTrayIcon().setError(error))
         
     def setIcon(self, *args):
-        gobject.idle_add(lambda: self.getTrayIcon().setIcon(*args))
+        if not self.terminated and self.isAlive():
+            gobject.idle_add(lambda: self.getTrayIcon().setIcon(*args))
 
     def run(self):
         try:
-            self.started = True
             if not self.terminated:
                 self.setInitialIcon()
                 self._refresh(False)
@@ -247,6 +245,8 @@ class Service(threading.Thread):
     def getTrayIcon(self):
         """ Must be called from main thread. Use gobject.idle_add """
         if self._trayicon == None:
+            if not self.isAlive():
+                raise Exception("Canno't create tray icon: " + self.name + " is not running.")
             self._trayicon = self.createTrayIcon()
         return self._trayicon
 
@@ -309,7 +309,8 @@ class CheckMailService(Service):
             self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
     
     def showNotify(self, tip):
-        gobject.idle_add(self.idleShowNotify, tip)
+        if not self.terminated and self.isAlive():
+            gobject.idle_add(self.idleShowNotify, tip)
     
     def idleShowNotify(self, tip):
         iconname = 'file://' + os.path.join(curdir, 'mail-unread.svg')
