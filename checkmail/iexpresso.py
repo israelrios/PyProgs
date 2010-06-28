@@ -394,7 +394,7 @@ class ExpressoManager:
             zfile.close()
         except zipfile.BadZipfile, e:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
-            raise
+            return None
         return msgs
     
     def getFullMsgEspecial(self, msgfolder, msgid):
@@ -803,12 +803,15 @@ class MailSynchronizer():
     
     def fixSubject(self, fullmsg):
         if fullmsg.has_key('Subject'):
-            #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
-            # "unfolding" do subject
-            subject = decode_header(fullmsg.get('Subject', ''))
-            #log(subject)
-            hsubject = email.header.Header(subject, continuation_ws=' ')
-            fullmsg.replace_header('Subject', hsubject)
+            try:
+                #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
+                # "unfolding" do subject
+                subject = decode_header(fullmsg.get('Subject', ''))
+                #log(subject)
+                hsubject = email.header.Header(subject, 'utf-8', continuation_ws=' ')
+                fullmsg.replace_header('Subject', hsubject)
+            except:
+                logError() #ignora exceções nessa parte. (não é fundamental pro funcionamento do sistema)
         
     def getDbId(self, fullmsg):
         #se não houver um Message-Id adiciona um gerado automaticamente
@@ -866,9 +869,9 @@ class MailSynchronizer():
                     newmsgs = {}
                 #faz o download das mensagens especiais individualmente
                 for eid, eflags in todownloadEx.items():
+                    log( 'Getting message using alternative way:', eid )
                     msgsrc = self.es.getFullMsgEspecial(folder_id, eid)
                     if msgsrc:
-                        log( 'Getting message using alternative way:', eid )
                         newmsgs[eid] = msgsrc
                         todownload[eid] = eflags
                 #importa as mensagens no banco
