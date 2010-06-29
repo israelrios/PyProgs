@@ -264,6 +264,7 @@ patHeader = re.compile('\r\n[t ]')
 def decode_header(header):
     text = []
     lastAscii = None
+    # "unfolding"
     dec = email.header.decode_header(patHeader.sub(' ', header.rstrip('\r\n')))
     for item in dec:
         curAscii = item[1] == None
