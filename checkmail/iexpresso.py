@@ -805,7 +805,6 @@ class MailSynchronizer():
         if fullmsg.has_key('Subject'):
             try:
                 #substitu o subject pra evitar um problema que acontece as vezes dependendo da formatação do subject
-                # "unfolding" do subject
                 subject = decode_header(fullmsg.get('Subject', ''))
                 #log(subject)
                 hsubject = email.header.Header(subject, 'utf-8', continuation_ws=' ')
@@ -865,6 +864,11 @@ class MailSynchronizer():
                         #download falhou, faz o download de todas as mensagens pelo modo especial
                         todownloadEx.update(todownload)
                         newmsgs = {}
+                    # se nem todas as mensagens foram retornadas agenda o download especial
+                    elif len(newmsgs) != len(todownload):
+                        for eid, eflags in todownload.items():
+                            if not eid in newmsgs:
+                                todownloadEx[eid] = eflags
                 else:
                     newmsgs = {}
                 #faz o download das mensagens especiais individualmente
