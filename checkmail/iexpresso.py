@@ -368,9 +368,16 @@ class ExpressoManager:
     
     def listFolders(self):
         data = self.callExpresso(self.urlListFolders)
+        folders = set() # usa-se um set porque o expresso pode retornar nomes repetidos
+        # as pastas vem indexadas de 0 até n em data
+        i = 0
+        while i in data:
+          folders.add(data[i]['folder_id'])
+          i += 1
+        # os outros 3 parâmetros são 'quota_limit', 'quota_percent', 'quota_used'
         self.quota = data['quota_percent']
         self.quotaLimit = data['quota_limit']
-        return [data[i] for i in range(len(data)-3)] # os outros 3 parâmetros são 'quota_limit', 'quota_percent', 'quota_used'
+        return folders
     
     def createFolder(self, path):
         self.callExpresso(self.urlCreateFolder, {'newp': path.encode('iso-8859-1')})
@@ -422,8 +429,14 @@ class ExpressoManager:
         filterParam = {'search_box_type': criteria.encode('iso-8859-1'), 'folder': folder.encode('iso-8859-1')}
         
         data = self.callExpresso(self.urlCheck, filterParam)
+        msgs = []
+        # as mensagens vem identificadas por um número (sequêncial) no dict da resposta
+        i = 0
+        while i in data:
+          msgs.append(ExpressoMessage(data[i]))
+          i += 1
         
-        return [ExpressoMessage(data[i]) for i in range(len(data)-1)] # o último valor é o número de mensagens
+        return msgs
     
     def moveMsgs(self, msgid, msgfolder, newfolder):
         if newfolder.upper() == 'INBOX':
@@ -694,7 +707,7 @@ class MailSynchronizer():
     def syncFolders(self):
         self.localFolders = self.getLocalFolders()
         # verifica se todas as pastas do expresso existem no imap local
-        self.efolders = [folder['folder_id'] for folder in self.es.listFolders()]
+        self.efolders = self.es.listFolders()
         for folder_id in self.efolders:
             hasfolder = False  
             self.createLocalFolder(folder_id)
