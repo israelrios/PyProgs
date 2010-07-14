@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 # Autor: Israel Rios
 # Created: 23-jan-2009
-import os
-    
 import gtk
-import ConfigParser
-import syslog
 
 from monitors import MonApp, curdir, MonLoginWindow, MonConfig
 
@@ -48,13 +44,13 @@ class LoginWindow(MonLoginWindow):
         if not checkmail and not proxyusage and not siscopservice and not expressoservice:
             showMessage(u"You must select at least one service.", "Monitors", self)
             return False
-        if self.app.login(user, passwd, checkmail, proxyusage, siscopservice, expressoservice):
-            self.conf.checkmail = checkmail
-            self.conf.proxyusage = proxyusage
-            self.conf.siscop = siscopservice
-            self.conf.expresso = expressoservice
-            return True
-        return False
+        
+        self.app.configServices(checkmail, proxyusage, siscopservice, expressoservice)
+        self.conf.checkmail = checkmail
+        self.conf.proxyusage = proxyusage
+        self.conf.siscop = siscopservice
+        self.conf.expresso = expressoservice
+        return MonLoginWindow.doLogin(self, user, passwd)
 
 
 #####################################################
@@ -93,7 +89,7 @@ class App(MonApp):
         loginWindow.run()
         
     #Retorna True se a janela de login pode ser fechada
-    def login(self, user, passwd, checkmail, proxyusage, siscopservice, expressoservice):
+    def configServices(self, checkmail, proxyusage, siscopservice, expressoservice):
 
         self.clearServices();
         
@@ -109,8 +105,6 @@ class App(MonApp):
         if expressoservice:
             import expresso
             self.addService(expresso.ExpressoService) #expresso
-        
-        return self.startServices(user, passwd)
 
 
 ########################################

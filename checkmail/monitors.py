@@ -256,6 +256,9 @@ class MonLoginWindow(gtk.Window):
 
     def run(self):
         self.show()
+    
+    def doLogin(self, user, passwd):
+        return self.app.startServices(user, passwd)
 
     def login(self, param):
         user = self.userEntry.get_text()
@@ -453,8 +456,3 @@ class MonApp:
             self.gclient.connect("save-yourself", self.saveyourself)
             self.gclient.connect("die", self.die)
   
-
-########################################
-# main
-
-

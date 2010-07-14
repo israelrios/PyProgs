@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 # Autor: Israel Rios
 # Created: 9-nov-2009
@@ -91,3 +92,13 @@ class ExpressoService(CheckMailService):
                 self.close()
             self.doLogin()
         CheckMailService.runService(self, timered)
+
+########################################
+# main
+
+if __name__ == '__main__':
+    from monitors import MonApp, MonLoginWindow
+    app = MonApp()
+    app.addService(ExpressoService)
+    MonLoginWindow(app).run()
+    app.run()
