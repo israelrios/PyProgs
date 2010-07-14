@@ -235,6 +235,11 @@ class MonLoginWindow(gtk.Window):
         mainbox.pack_end(self.createButtons(), False, True, 0)
         mainbox.show()
         return mainbox
+    
+    def show(self):
+        # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
+        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
+        gtk.Window.show(self)
       
     def __init__(self, app):
         self.app = app
@@ -262,6 +267,9 @@ class MonLoginWindow(gtk.Window):
             self.passEntry.grab_focus()
 
     def run(self):
+        if self.app.tryAutoLogin:
+            if self.login(None):
+                return
         self.show()
     
     def doLogin(self, user, passwd):
@@ -271,8 +279,9 @@ class MonLoginWindow(gtk.Window):
         user = self.userEntry.get_text()
         passwd = self.passEntry.get_text()
         if len(user.strip()) == 0 or len(passwd.strip()) == 0:
-            showMessage(u"Username and password are required.", "Monitors", self)
-            return
+            if self.get_property('visible'):
+                showMessage(u"Username and password are required.", "Monitors", self)
+            return False
         if self.doLogin(user, passwd):
             self.conf.username = user
             if self.cbSavePass.get_active():
@@ -281,6 +290,8 @@ class MonLoginWindow(gtk.Window):
                 self.conf.password = ''
             self.conf.save()
             self.destroy()
+            return True
+        return False
 
 #####################################################
 # MonConfig
@@ -391,6 +402,7 @@ class MonApp:
         syslog.openlog('monitors')
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
+        self.tryAutoLogin = len(sys.argv) > 1 and sys.argv[1] == '-auto'
     
     def addService(self, serviceClass):
         self.services.append(ServiceRunner(self, serviceClass))

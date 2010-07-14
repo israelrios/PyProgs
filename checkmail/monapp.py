@@ -63,8 +63,8 @@ class Config(MonConfig):
     
     def loadValues(self):
         MonConfig.loadValues(self)
-        self.checkmail = self.readOption('services', 'checkmail', True)
-        self.proxyusage = self.readOption('services', 'proxyusage', True)
+        self.checkmail = self.readOption('services', 'checkmail', False)
+        self.proxyusage = self.readOption('services', 'proxyusage', False)
         self.siscop = self.readOption('services', 'siscop', True)
         self.expresso = self.readOption('services', 'expresso', True)
 
