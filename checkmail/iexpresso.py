@@ -5,7 +5,7 @@
 
 import imap4utf7 # pro codec imap4-utf-7
 
-from monitors import decode_header
+from monutil import decode_header
 
 import sys
 import urllib

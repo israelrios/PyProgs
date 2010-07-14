@@ -5,85 +5,17 @@
 import os
 import sys
 import gtk
+import ConfigParser
 import gobject
-import subprocess
 import threading
 import syslog
 import traceback
-#checkmail
-import email.header
-from imaplib import IMAP4, IMAP4_SSL
-#proxyusage
-import urllib
-import urllib2
-import cookielib
-import time
-import locale
-from HTMLParser import HTMLParser
-import re
+import signal
 
-def execute(cmd):
-    pid = os.fork()
-    if pid == 0:
-        # To become the session leader of this new session and the process group
-        # leader of the new process group, we call os.setsid().
-        try:
-            os.setsid()
-            subprocess.Popen(cmd, close_fds=True)
-        except:
-            pass #ignore exceptions
-        os._exit(os.EX_OK)
-    else:
-        os.waitpid(pid, 0)
-
-#Desenha o ícone com uma barra
-class IconBar(gtk.gdk.Pixbuf):
-    def __init__(self, size, percent,
-                 safe=[0,255,0], alert=[255,255,0], danger=[255,0,0], overflow=[255,0,0]):
-        gtk.gdk.Pixbuf.__init__(self, gtk.gdk.COLORSPACE_RGB, False, 8, size, size)
-        self.safe = safe
-        self.alert = alert
-        self.danger = danger
-        self.overflow = overflow
-        self.background = [0,100,0]
-        self.border = [0,0,0]
-        self._draw(percent)
-
-    def _draw(self, percent):
-        size = self.get_width()
-        # Define a cor da barra de acordo com a percentagem
-        if( percent >= 100 ):
-            barcolor = self.overflow
-        elif percent >= 80:
-            barcolor = self.danger
-        elif percent >= 50:
-            barcolor = self.alert
-        else:
-            barcolor = self.safe
-
-        totalheight = size-2 # tirando as bordas
-        
-        barheight = round(percent * totalheight / 100.0) # altura da barra
-        if percent > 0 and barheight < 1: #vazio somente quando percent = zero
-            barheight = 1
-
-        # A imagem é desenhada de cabeça para baixo
-        barstart = totalheight - barheight + 1 # conta com a borda
-        s = self.get_pixels_array()
-        s[0,:] = self.border # linha de cima
-        for i in range(1, size-1): #desenha as linhas da barra
-            if i >= barstart:
-                color = barcolor
-            else:
-                color = self.background
-            s[i,0] = self.border
-            s[i,1:size-1] = color
-            s[i,size-1] = self.border
-
-        s[size-1, :] = self.border # linha de baixo
-
-    def update(self, percent):
-        self._draw(percent)
+if 'http_proxy' in os.environ:
+    del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
+    
+curdir = os.path.abspath( os.path.dirname(sys.argv[0]) )
 
 class TrayIcon(gtk.StatusIcon):
     def __init__(self, service):
@@ -126,39 +58,6 @@ class TrayIcon(gtk.StatusIcon):
     def destroy(self):
         self.set_visible(False)
 
-
-class ProxyUsageTrayIcon(TrayIcon):
-    def __init__(self, service):
-        TrayIcon.__init__(self, service)
-        self.connect('size-changed', self.onSizeChanged)
-        self.percent = 0
-        self.icon = IconBar(22, self.percent)
-
-    def onSizeChanged(self, object, size):
-        self.icon = IconBar(size, self.percent)
-        if self.get_visible():
-            self.set_from_pixbuf(self.icon)
-
-    def setIcon(self, percent, tip):
-        self.percent = percent
-        self.icon.update(percent)
-        self.set_from_pixbuf(self.icon)
-        self.set_tooltip(tip)
-        self.set_visible(True)
-
-class CheckMailTrayIcon(TrayIcon):
-    def onActivate(self, event):
-        self.service.showMail();
-
-    def setIcon(self, hasmail, tip):
-        if hasmail:
-            iconname = 'mail-unread.png'
-        else:
-            iconname = 'mail-read.png'
-        iconname = os.path.join(curdir, iconname)
-        self.set_from_file(iconname)
-        self.set_tooltip(tip)
-        self.set_visible(True)
 
 def showMessage(text, caption, parentWindow = None, type = gtk.MESSAGE_INFO):
     dlg = gtk.MessageDialog(parentWindow, gtk.DIALOG_MODAL, type, gtk.BUTTONS_OK, text)
@@ -257,238 +156,305 @@ class Service(threading.Thread):
             self.start()
         self.goEvent.set()
 
-#################################################################
-# CheckMail
 
-patHeader = re.compile('\r\n[t ]')
-def decode_header(header):
-    text = []
-    lastAscii = None
-    # "unfolding"
-    dec = email.header.decode_header(patHeader.sub(' ', header.rstrip('\r\n')))
-    for item in dec:
-        curAscii = item[1] == None
-        if lastAscii != None and lastAscii != curAscii:
-            text.append(' ')
-        if curAscii:
-            text.append(item[0])
-        else:
-            text.append(item[0].decode(item[1]))
-        lastAscii = curAscii
-    return ''.join(text)
-
-class CheckMailService(Service):
-    def __init__(self, app, user, passwd):
-        Service.__init__(self, app, user, passwd)
-        self.haveNotify = False
-        self.lastMsg = None
-        try:
-            self.notify = __import__('pynotify') 
-            if self.notify.init("Monitors"):
-                self.haveNotify = True
-                self.notifyCaps = self.notify.get_server_caps()
-            else:
-                print "There was a problem initializing the pynotify module"
-        except:
-            print "You don't seem to have pynotify installed"
-        self.readConfig()
-    
+#####################################################
+# MonLoginWindow
+class MonLoginWindow(gtk.Window):
     def readConfig(self):
+        return MonConfig()
+    
+    def createUserPass(self):
+        # Load the login entry box
+        userLabel = gtk.Label("Username: ")
+        userLabel.show()
+
+        self.userEntry = gtk.Entry()
+        self.userEntry.set_max_length(50)
+        self.userEntry.set_text(self.conf.username)
+        self.userEntry.connect("activate", self.login)
+        self.userEntry.show()
+
+        # Load the pass entry box
+        passLabel = gtk.Label("Password: ")
+        passLabel.show()
+
+        self.passEntry = gtk.Entry()
+        self.passEntry.set_max_length(50)
+        self.passEntry.set_text('')
+        self.passEntry.connect("activate", self.login)
+        self.passEntry.set_visibility(False)
+        self.passEntry.show()
+
+        table = gtk.Table(2, 2)
+        table.set_row_spacings(8)
+        
+        table.attach(userLabel, 0, 1, 0, 1, gtk.FILL, 0)
+        table.attach(self.userEntry, 1, 2, 0, 1, gtk.EXPAND|gtk.FILL, 0)
+
+        table.attach(passLabel, 0, 1, 1, 2, gtk.FILL, 0)
+        table.attach(self.passEntry, 1, 2, 1, 2, gtk.EXPAND|gtk.FILL, 0)
+        
+        table.show()
+        
+        return table
+    
+    def createButtons(self):
+        self.okButton = gtk.Button(stock=gtk.STOCK_OK)
+        self.okButton.connect("clicked", self.login)
+        self.okButton.set_flags(gtk.CAN_DEFAULT)
+        self.okButton.show()
+
+        cancelButton = gtk.Button(stock=gtk.STOCK_CANCEL)
+        cancelButton.connect("clicked", gtk.main_quit)
+        cancelButton.show()
+
+        bbox = gtk.HButtonBox()
+        bbox.set_layout(gtk.BUTTONBOX_EDGE)
+        bbox.pack_start(cancelButton, True, True, 0)
+        bbox.pack_end(self.okButton, True, True, 0)
+        bbox.show()
+        
+        return bbox;
+    
+    def createCustom(self, mainbox):
+        pass
+    
+    def createControls(self):
+        # Append login and pass entry box to vbox
+        mainbox = gtk.VBox(False, 0)
+        mainbox.set_spacing(15)
+        mainbox.pack_start(self.createUserPass(), True, True, 0)
+        self.createCustom(mainbox)
+        mainbox.pack_end(self.createButtons(), False, True, 0)
+        mainbox.show()
+        return mainbox
+      
+    def __init__(self, app):
+        self.app = app
+        gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
+
+        self.connect("delete-event", gtk.main_quit)
+        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
+
+        self.conf = self.readConfig()
+
+        #self.set_size_request(250, 150)
+        self.set_border_width(10)
+        self.set_title("Monitors - Login")
+        self.set_position(gtk.WIN_POS_CENTER)
+        self.set_modal(True)
+        
+        self.add(self.createControls())
+        
+        self.okButton.grab_default()
+
+        # Ajusta o controle inicial
+        if self.userEntry.get_text().strip() == '':
+            self.userEntry.grab_focus()
+        else:
+            self.passEntry.grab_focus()
+
+    def run(self):
+        self.show()
+
+    def login(self, param):
+        user = self.userEntry.get_text()
+        passwd = self.passEntry.get_text()
+        if len(user.strip()) == 0 or len(passwd.strip()) == 0:
+            showMessage(u"Username and password are required.", "Monitors", self)
+            return
+        if self.doLogin(user, passwd):
+            self.conf.username = user
+            self.conf.save()
+            self.destroy()
+
+#####################################################
+# MonConfig
+class MonConfig:
+    username = ''
+    def __init__(self):
         home = os.getenv('USERPROFILE') or os.getenv('HOME')
-        filename = os.path.join(home, ".checkmail.conf")
-        self.imapcriteria = "(UNSEEN)"
-        if os.path.exists(filename):
-            f = open(filename, 'r')
-            lines = []
-            try:
-                for line in f:
-                    line = line.strip()
-                    if not line.startswith('#'):
-                        lines.append(line)
-            finally:
-                f.close()
-            self.imapcriteria = '(' + ' '.join(lines) + ')' # tem que estar entre parenteses pro imap lib não colocar entre aspas
+        self.filename = os.path.join(home, ".monitors.cfg")
+        self.config = ConfigParser.ConfigParser()
+        self.config.read(self.filename)
+        self.username = self.readOption('login', 'username', '')
+        self.loadValues()
     
-    def showNotify(self, tip):
-        if not self.terminated and self.isAlive():
-            gobject.idle_add(self.idleShowNotify, tip)
+    def loadValues(self):
+        pass
     
-    def idleShowNotify(self, tip):
-        iconname = 'file://' + os.path.join(curdir, 'mail-unread.svg')
-        n = self.notify.Notification("New Mail", tip, iconname)
-        n.set_urgency(self.notify.URGENCY_NORMAL)
-        n.set_timeout(10000) # 10 segundos
-        n.attach_to_status_icon(self.getTrayIcon())
-        if "actions" in self.notifyCaps:
-          loop = gobject.MainLoop ()
-          n.connect('closed', lambda sender: loop.quit())
-          n.add_action("default", "Open Mail", self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
-          n.show()
-          loop.run() #sem o loop não funciona a action da notificação
-        else:
-          n.show()
-        return False # pra não rodar novamente no caso de ser chamada por idle_add
+    def saveValues(self):
+        pass
+
+    def readOption(self, section, option, default):
+        if not self.config.has_option(section, option):
+            return default
+        if isinstance(default, bool):
+            return self.config.getboolean(section, option)
+        return self.config.get(section, option)
+
+    def save(self):
+        config = self.config
         
-    def onNotifyClick(self, n, action):
-        self.showMail()
-        n.close()
-                
-    def createTrayIcon(self):
-        return CheckMailTrayIcon(self)
-
-    def showMail(self):
-        #if emailreader == None or emailreader.poll() != None:
-        #    self.emailreader = \
-        #subprocess.Popen('thunderbird', close_fds=True)
-        execute('thunderbird')
-        #remove o status "new mail"
-        self.setStatus([], False)
-        #agenda a execução do próximo refresh para 30seg
-        #t = threading.Timer(30, lambda: self.refresh())
-        #t.setDaemon(True)
-        #t.start()
-
-    def runService(self, timered):
-        self.setStatus(self.checkNewMail(), timered)
+        if not config.has_section('login'):
+            config.add_section('login')
+        config.set('login', 'username', self.username)
         
-    def processTip(self, subjects, tip):
-        return tip # pode ser sobreescrito em classes que derivam desta
-
-    def setStatus(self, subjects, timered = False):
-        hasmail = len(subjects) > 0
-        if hasmail:
-            tip = '* ' + '\n* '.join(subjects)
-        else:
-            tip = 'No new email'
-        self.setIcon(hasmail, self.processTip(subjects, tip))
+        self.saveValues()
         
-        if self.haveNotify:
-            if timered and hasmail and self.lastMsg != tip:
-                self.showNotify(tip)
-            self.lastMsg = tip
-    
-    def createImapConnection(self):
-        return IMAP4_SSL('corp-bsa-exp-mail.bsa.serpro', 993)
-
-    ###########################################################
-    # Verifica se existem novas mensagens de email que se encaixam nos filtros
-    def checkNewMail(self):
+        configfile = open(self.filename, 'w')
         try:
-            subjects = []
-            imap = self.createImapConnection()
+            config.write(configfile)
+        finally:
+            configfile.close()
 
-            imap.login(self.user, self.passwd)
-            try:
-                imap.select(readonly=True)
-                
-                typ, msgnums = imap.search("US-ASCII", self.imapcriteria)
-            
-                self.parseError(typ, msgnums)
-                
-                if len(msgnums) > 0 and len(msgnums[0].strip()) > 0:
-                    typ, msgs = imap.fetch( msgnums[0].replace(' ', ',') , 
-                                            '(BODY[HEADER.FIELDS (SUBJECT)])')
-                    #print msgs
-                    self.parseError(typ, msgs)
-                    for m in msgs:
-                        if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
-                            #Extrai o subject e decodifica o texto
-                            subjects.append(decode_header(m[1].strip('Subject:').strip()))
-            finally:
-                imap.close()
-                imap.logout()
 
-            return subjects
-        except Exception, e:
-            raise Exception(u"It was not possible to check your mail box. Error:\n\n" + str(e))
+#####################################################
+# ServiceRunner
 
-    def parseError(self, typ, msgnums):
-        if typ != 'OK':
-            if len(msgnums) > 0:
-                raise Exception(msgnums[0])
-            else:
-                raise Exception('Bad response.')
+class ServiceRunner:
+    service = None
+    started = False
+    
+    def __init__(self, app, serviceClass):
+        self.app = app
+        self.serviceClass = serviceClass
+        
+    def check(self, active, user, passwd):
+        if self.service != None:
+            self.service.quit()
+            self.service = None
+        if active:
+            self.service = self.serviceClass(self, user, passwd)
+            return self.service.test()
+        else:
+            return True
+    
+    def serviceQuit(self, service):
+        if self.started and self.service == service:
+            self.started = False
+            self.service = None
+            self.app.serviceQuit(service)
+    
+    def start(self):
+        if( self.service != None):
+            self.started = True
+            self.service.start();
+    
+    def running(self):
+        return (self.service != None)
+    
+    def quit(self):
+        if self.service != None:
+            print self.service
+            self.service.quit()
+
+    def join(self):
+        service = self.service # guarda a instância porque ela pode ser alterada no serviceQuit
+        if service != None and service.isAlive():
+            service.join(15) # aguarda no máximo 15 segundos
 
 
 #####################################################################
-#ProxyUsage    
+# MonApp
 
-#Classe para extrair o texto do HTML
-class HtmlTextParser(HTMLParser):
+class MonApp:
 
     def __init__(self):
-        self.texto = ""
-        HTMLParser.__init__(self)
-
-    def handle_starttag(self, tag, attrs):
-        pass
-
-    def handle_data(self, data):
-        self.texto = self.texto + data
-
-    def handle_endtag(self, tag):
-        pass
-
-
-class ProxyUsageService(Service):
-    def __init__(self, app, user, passwd):
-        Service.__init__(self, app, user, passwd)
-        # Os campos do formulário
-        self.fields = {}
-        self.fields['uid'] = user
-        self.fields['pwd'] = passwd
-        #Inicialização
-        cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
-        self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookies))
-        # Expressão regular para extrair os dados do consumo
-        self.pattern = re.compile(r"\|\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}\:\d{2}\:\d{2})" +
-                                  r"\s*(\d+(?:\,\d+)?)\s*([KMG])Bytes\s*=\s*(\d+(?:\.\d+)?)\%",
-                                  re.MULTILINE | re.IGNORECASE)
+        self.services = []
+        syslog.openlog('monitors')
+        gobject.threads_init()
+        #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
     
-    def createTrayIcon(self):
-        return ProxyUsageTrayIcon(self)
+    def addService(self, serviceClass):
+        self.services.append(ServiceRunner(self, serviceClass))
+    
+    def clearServices(self):
+        for s in self.services:
+            s.quit()
+        self.services = []
+        
+    #Retorna True se a janela de login puder ser fechada
+    def startServices(self, user, passwd):        
+        ok = True
+        for service in self.services:
+          ok = ok and service.check(True, user, passwd)
+        
+        if ok:
+            for t in self.services:
+                t.start()
+        return ok
 
-    def runService(self, timered):
-        pu = self.getProxyUsage()
-        #O site do consumo não segue um padrão para formatação de números com ponto flutuante
-        #Os números são ajustados para o padrão americano, convertidos para float e
-        # depois convertidos para string utilizando a configuração do usuário
-        bytes = float(pu[1].replace(',', 'x').replace('.', ',').replace('x', '.'))
-        percent = float(pu[3])
-        texto = u"Proxy usage: %s%sB (%s%%)  %s" % \
-            (locale.str(bytes), pu[2], locale.str(percent), pu[0])
-        self.setIcon(percent, texto)
+    def serviceQuit(self, service):
+        print "service quit", service
+        for t in self.services:
+            if t.running():
+                return
+        gobject.idle_add(gtk.main_quit)
 
-    ###########################################################
-    # Extrai o texto do HTML e separa a informação do consumo
-    # Formato:
-    #   23/01/2009 15:16:01
-    #   40,1965 MBytes = 66.99%
-    def getProxyUsage(self):
-        try:
-            url = self.opener.open("https://www.cooseg.celepar.parana/consumo/entrar.php", urllib.urlencode(self.fields, True))
-        except Exception, e:
-            raise Exception(u"It was not possible to check your proxy usage. Error:\n\n" + str(e))
+    def quit(self, wait = True):
+        running = False
+        for t in self.services:
+            if t.running():
+                running = True
+            t.quit()
 
-        parser = HtmlTextParser()
-        for line in url.readlines():
-            parser.feed(line)
-        parser.close()
+        if not running:
+            try:
+                gtk.main_quit()
+            except:
+                pass # gtk.main_quit pode dar uma exceção se estiver fora do mainloop
 
-        mo = self.pattern.search(parser.texto)
-        if mo != None:
-            return mo.groups()
+        if running and wait:
+            for t in self.services:
+                t.join()
+
+    def saveyourself(self, *args): #phase, save_style, is_shutdown, interact_style, is_fast):
+        """ Chamado pelo gnome antes de fechar a sessão.
+            O correto seria só salvar os dados e não fechar o programa. """
+        self.quit(True)
+        return True
+
+    def die(self, *args):
+        self.quit(True)
+        return True
+
+    def handlesigterm(self, signum, frame):
+        if signum == signal.SIGTERM:
+            print 'TERM SIGNAL'
+        elif signum == signal.SIGHUP:
+            print 'HUP SIGNAL'
         else:
-            #O parser não suporta HTML entitys (Ex: &aacute)
-            if parser.texto.find('No h registro para seu usurio at o momento') >= 0 :
-                return [time.strftime("%d/%m/%Y %H:%M:%S", time.localtime()), '0', 'K', '0']
-            raise Exception(u"It was not possible to check your proxy usage.\n" +
-                            u"Make sure the entered username and password are correct.")
+            print 'INT SIGNAL'
+        self.quit(False)
+    
+    def run(self):
+        signal.signal(signal.SIGINT, self.handlesigterm)
+        signal.signal(signal.SIGTERM, self.handlesigterm)
+        signal.signal(signal.SIGHUP, self.handlesigterm)
+        try:
+            self.handleGnomeSession()
+            gtk.main()
+        finally:
+            self.quit(True)
 
+    def handleGnomeSession(self):
+        """ Define alguns handlers para eventos da sessão Gnome """
+        try:
+            import gnome
+            import gnome.ui
+        except:
+            pass
+        else:
+            gnome.program_init('monitors', '2.0')
+            self.gclient = gnome.ui.master_client()
+            #self.gclient = gnome.ui.Client()
+            #self.gclient.connect_to_session_manager()
+            self.gclient.connect("save-yourself", self.saveyourself)
+            self.gclient.connect("die", self.die)
+  
 
 ########################################
 # main
-
-curdir = os.path.abspath( os.path.dirname(sys.argv[0]) )
 
 

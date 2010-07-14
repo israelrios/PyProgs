@@ -2,13 +2,13 @@
 # Autor: Israel Rios
 # Created: 15-abr-2009
 
-from monitors import Service, HtmlTextParser, TrayIcon, curdir, execute
+from monitors import Service, TrayIcon, curdir
+from monutil import HtmlTextParser, execute
 
 import os
 import urllib
 import urllib2
 import cookielib
-from HTMLParser import HTMLParser
 import datetime
 from threading import Timer
 import dbus
@@ -76,7 +76,10 @@ class SisCopService(Service):
             bus = dbus.SessionBus()
             ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
             mustShowPage = not ssaver.GetSessionIdle()
-            ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
+            try:
+              ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
+            except:
+              pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
         
         if mustShowPage:
             self.showPage()

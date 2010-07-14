@@ -2,7 +2,7 @@
 # Autor: Israel Rios
 # Created: 9-nov-2009
 
-from monitors import Service, execute, CheckMailService
+from checkmail import CheckMailService
 
 import threading
 from imaplib import IMAP4
