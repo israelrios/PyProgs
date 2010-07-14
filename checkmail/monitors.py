@@ -11,6 +11,7 @@ import threading
 import syslog
 import traceback
 import signal
+import zlib
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
@@ -180,12 +181,16 @@ class MonLoginWindow(gtk.Window):
 
         self.passEntry = gtk.Entry()
         self.passEntry.set_max_length(50)
-        self.passEntry.set_text('')
+        self.passEntry.set_text(self.conf.password)
         self.passEntry.connect("activate", self.login)
         self.passEntry.set_visibility(False)
         self.passEntry.show()
+        
+        self.cbSavePass = gtk.CheckButton("Sa_ve Password")
+        self.cbSavePass.show()
+        self.cbSavePass.set_active(self.conf.password != '')
 
-        table = gtk.Table(2, 2)
+        table = gtk.Table(3, 2)
         table.set_row_spacings(8)
         
         table.attach(userLabel, 0, 1, 0, 1, gtk.FILL, 0)
@@ -193,6 +198,8 @@ class MonLoginWindow(gtk.Window):
 
         table.attach(passLabel, 0, 1, 1, 2, gtk.FILL, 0)
         table.attach(self.passEntry, 1, 2, 1, 2, gtk.EXPAND|gtk.FILL, 0)
+        
+        table.attach(self.cbSavePass, 1, 2, 2, 3, gtk.EXPAND|gtk.FILL, 0)
         
         table.show()
         
@@ -268,6 +275,10 @@ class MonLoginWindow(gtk.Window):
             return
         if self.doLogin(user, passwd):
             self.conf.username = user
+            if self.cbSavePass.get_active():
+                self.conf.password = passwd
+            else:
+                self.conf.password = ''
             self.conf.save()
             self.destroy()
 
@@ -275,12 +286,19 @@ class MonLoginWindow(gtk.Window):
 # MonConfig
 class MonConfig:
     username = ''
+    password = ''
     def __init__(self):
         home = os.getenv('USERPROFILE') or os.getenv('HOME')
         self.filename = os.path.join(home, ".monitors.cfg")
         self.config = ConfigParser.ConfigParser()
         self.config.read(self.filename)
         self.username = self.readOption('login', 'username', '')
+        self.password = self.readOption('login', 'pass', '')
+        if self.password != '':
+            try:
+                self.password = zlib.decompress(self.password)
+            except:
+                self.password = ''
         self.loadValues()
     
     def loadValues(self):
@@ -302,6 +320,11 @@ class MonConfig:
         if not config.has_section('login'):
             config.add_section('login')
         config.set('login', 'username', self.username)
+        
+        pw = self.password
+        if pw != '':
+            pw = zlib.compress(pw)
+        config.set('login', 'pass', pw)
         
         self.saveValues()
         
