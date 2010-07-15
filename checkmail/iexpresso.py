@@ -653,7 +653,10 @@ class MailSynchronizer():
     def loginLocal(self):
         try:
             if self.client != None and self.client.state in ('AUTH', 'SELECTED'):
-                self.logoutLocal()
+                try:
+                    self.logoutLocal()
+                except:
+                    logError()
             self.client = imaplib.IMAP4('localhost')
             self.client.login(self.user, self.password)
         except Exception, e:
@@ -944,7 +947,15 @@ class MailSynchronizer():
     def initUpdate(self):
         self.updatedFolders = set()
         
-        localdb = self.loadLocalMsgs()
+        try:
+            localdb = self.loadLocalMsgs()
+        except:
+            logError()
+            # Reconecta e tenta novamente
+            log("Reconnecting to local imap ...")
+            self.loginLocal()
+            localdb = self.loadLocalMsgs()
+            
         self.checkSignature(localdb)
         
         day = datetime.date.today().toordinal() # o número de dias desde 1-1-1
