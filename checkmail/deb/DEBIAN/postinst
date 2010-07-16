@@ -21,7 +21,9 @@ conf="${confdir}/dovecot.conf"
 
 if [ -e "$conf" ]; then
 	# when files are equal, exit
-	(diff -q $srcconf $conf > /dev/null) || exit
+	if diff -q $srcconf $conf >/dev/null 2>&1; then
+		exit
+	fi
 	#create a backup
 	mv $conf "${conf}-${curdate}"
 fi
