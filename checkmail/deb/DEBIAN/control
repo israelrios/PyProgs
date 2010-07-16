@@ -1,0 +1,12 @@
+Package: iexpresso
+Version: 1.1
+Section: web 
+Priority: optional
+Architecture: all
+Essential: no
+Installed-Size: 1024
+Depends: dovecot-imapd|bincimap, python, python-dbus, python-gtk2, python-notify
+Recommends: python-gnome2
+Maintainer: Israel Rios <israel.rios@israelrios.com>
+Description: Checks for mail in expresso mail and put it in a local imap.
+ Synchronizes expresso and local imap mail boxes.

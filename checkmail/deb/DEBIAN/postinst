@@ -1,0 +1,30 @@
+#!/bin/sh
+
+set -e
+
+confdir="/etc/dovecot"
+if [ ! -d "${confdir}" ]; then
+	mkdir -p "${confdir}"
+fi
+
+curdate=`date +%y%m%d.%H%M%S`
+srcconf=/usr/share/iexpresso/dovecot.conf
+conf="${confdir}/dovecot.conf"
+
+if [ -e "$conf" ]; then
+	# when files are equal, exit
+	(diff -q $srcconf $conf > /dev/null) || exit
+	#create a backup
+	mv $conf "${conf}-${curdate}"
+fi
+
+cp $srcconf ${conf}
+
+#restart
+if [ -x "/etc/init.d/dovecot" ]; then
+	if [ -x /usr/sbin/invoke-rc.d ]; then
+		invoke-rc.d dovecot restart
+	else
+		/etc/init.d/dovecot restart
+	fi
+fi

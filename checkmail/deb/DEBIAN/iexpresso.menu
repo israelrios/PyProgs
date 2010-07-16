@@ -1,0 +1,4 @@
+?package(iexpresso):needs="x11" \
+             section="Applications/Network/Communication"\
+             title="iExpresso" command="/usr/share/iexpresso/expresso.py"\
+			 hints="Mail"

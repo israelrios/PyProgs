@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Encoding=UTF-8
+Name=iExpresso
+Type=Application
+Terminal=false
+Categories=Application;Network;
+Exec=/usr/share/iexpresso/expresso.py -auto
+Comment=Mail Monitor
+Comment[pt_BR]=Monitor de Email
+Icon=/usr/share/iexpresso/mail-unread.svg
