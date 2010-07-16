@@ -669,7 +669,6 @@ class MailSynchronizer():
         self.es = ExpressoManager(user, password)
         self.curday = 0
         self.loginLocal()
-        self.es.doLogin()
         self.db = self.loadDb()
         self.smartFolders = None
     
@@ -946,6 +945,9 @@ class MailSynchronizer():
         
     def initUpdate(self):
         self.updatedFolders = set()
+        
+        if not self.es.logged:
+            self.es.doLogin()
         
         try:
             localdb = self.loadLocalMsgs()

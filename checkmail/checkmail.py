@@ -7,6 +7,7 @@ import os
 from monitors import Service, TrayIcon, curdir
 from imaplib import IMAP4, IMAP4_SSL
 import gobject
+import threading
 from monutil import decode_header, execute
 
 #################################################################
@@ -32,6 +33,7 @@ class CheckMailService(Service):
         Service.__init__(self, app, user, passwd)
         self.haveNotify = False
         self.lastMsg = None
+        self.iclient = None
         try:
             self.notify = __import__('pynotify') 
             if self.notify.init("Monitors"):
@@ -99,7 +101,21 @@ class CheckMailService(Service):
         #t.start()
 
     def runService(self, timered):
-        self.setStatus(self.checkNewMail(), timered)
+        try:
+            subjects = self.checkNewMail()
+        except:
+            # em caso de erro fecha a conexão e tenta novamente 
+            if not self.iclient is None:
+                self.closeImap()
+                if self == threading.currentThread():
+                    print "CheckMailService: possibly connection failure. Trying again."
+                    subjects = self.checkNewMail()
+                else:
+                    raise # deve estar testando a conexão
+            else:
+                raise # o imap não foi criado, deve ser outra coisa
+        
+        self.setStatus(subjects, timered)
         
     def processTip(self, subjects, tip):
         return tip # pode ser sobreescrito em classes que derivam desta
@@ -119,34 +135,44 @@ class CheckMailService(Service):
     
     def createImapConnection(self):
         return IMAP4_SSL('corp-bsa-exp-mail.bsa.serpro', 993)
+    
+    def closeImap(self):
+        if not self.iclient is None:
+            try:
+                self.iclient.logout()
+            finally:
+                self.iclient = None
+
+    def onQuit(self):
+        self.closeImap()
 
     ###########################################################
     # Verifica se existem novas mensagens de email que se encaixam nos filtros
     def checkNewMail(self):
         try:
             subjects = []
-            imap = self.createImapConnection()
-
-            imap.login(self.user, self.passwd)
-            try:
-                imap.select(readonly=True)
-                
-                typ, msgnums = imap.search("US-ASCII", self.imapcriteria)
             
-                self.parseError(typ, msgnums)
-                
-                if len(msgnums) > 0 and len(msgnums[0].strip()) > 0:
-                    typ, msgs = imap.fetch( msgnums[0].replace(' ', ',') , 
-                                            '(BODY[HEADER.FIELDS (SUBJECT)])')
-                    #print msgs
-                    self.parseError(typ, msgs)
-                    for m in msgs:
-                        if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
-                            #Extrai o subject e decodifica o texto
-                            subjects.append(decode_header(m[1].strip('Subject:').strip()))
-            finally:
-                imap.close()
-                imap.logout()
+            if self.iclient is None:
+                self.iclient = self.createImapConnection()
+                self.iclient.login(self.user, self.passwd)
+            
+            self.iclient.select(readonly=True)
+            
+            typ, msgnums = self.iclient.search("US-ASCII", self.imapcriteria)
+        
+            self.parseError(typ, msgnums)
+            
+            if len(msgnums) > 0 and len(msgnums[0].strip()) > 0:
+                typ, msgs = self.iclient.fetch( msgnums[0].replace(' ', ',') , 
+                                        '(BODY[HEADER.FIELDS (SUBJECT)])')
+                #print msgs
+                self.parseError(typ, msgs)
+                for m in msgs:
+                    if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
+                        #Extrai o subject e decodifica o texto
+                        subjects.append(decode_header(m[1].strip('Subject:').strip()))
+            
+            self.iclient.close()
 
             return subjects
         except Exception, e:

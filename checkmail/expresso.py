@@ -26,8 +26,10 @@ class ExpressoService(CheckMailService):
         self.logged = True
     
     def onQuit(self):
-        CheckMailService.onQuit(self)
-        self.close()
+        try:
+            CheckMailService.onQuit(self)
+        finally:
+            self.close()
         
     def close(self):
         self.sync.close()
@@ -87,11 +89,12 @@ class ExpressoService(CheckMailService):
                 self.sync.loadUnseen()
                 if timered:
                     self.refreshcount += 1
+            # checks for new mail and notify the user as needed
+            CheckMailService.runService(self, timered)
         else:
             if self.logged:
                 self.close()
             self.doLogin()
-        CheckMailService.runService(self, timered)
 
 ########################################
 # main
