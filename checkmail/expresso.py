@@ -102,6 +102,7 @@ class ExpressoService(CheckMailService):
 if __name__ == '__main__':
     from monitors import MonApp, MonLoginWindow
     app = MonApp()
+    app.desktopFile = 'iexpresso-auto.desktop'
     app.addService(ExpressoService)
     MonLoginWindow(app).run()
     app.run()

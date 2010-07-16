@@ -12,6 +12,8 @@ import syslog
 import traceback
 import signal
 import zlib
+import tempfile
+import fcntl
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
@@ -161,8 +163,34 @@ class Service(threading.Thread):
 #####################################################
 # MonLoginWindow
 class MonLoginWindow(gtk.Window):
+    
+    def __init__(self, app):
+        self.app = app
+        gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
+
+        self.connect("delete-event", gtk.main_quit)
+        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
+
+        self.conf = self.readConfig()
+
+        #self.set_size_request(250, 150)
+        self.set_border_width(10)
+        self.set_title("Monitors - Login")
+        self.set_position(gtk.WIN_POS_CENTER)
+        self.set_modal(True)
+        
+        self.add(self.createControls())
+        
+        self.okButton.grab_default()
+
+        # Ajusta o controle inicial
+        if self.userEntry.get_text().strip() == '':
+            self.userEntry.grab_focus()
+        else:
+            self.passEntry.grab_focus()
+    
     def readConfig(self):
-        return MonConfig()
+        return MonConfig(self.app)
     
     def createUserPass(self):
         # Load the login entry box
@@ -189,8 +217,18 @@ class MonLoginWindow(gtk.Window):
         self.cbSavePass = gtk.CheckButton("Sa_ve Password")
         self.cbSavePass.show()
         self.cbSavePass.set_active(self.conf.password != '')
+        
+        self.cbAutoStart = gtk.CheckButton("Auto Start")
+        if self.app.desktopFile is None:
+            self.cbAutoStart.hide()
+        else:
+            self.cbAutoStart.show()
+            self.cbAutoStart.set_active(self.conf.isAutoStartEnabled())
+            self.cbAutoStart.connect("clicked", self.checkAutoStart)
+            
+            self.checkAutoStart(None)
 
-        table = gtk.Table(3, 2)
+        table = gtk.Table(4, 2)
         table.set_row_spacings(8)
         
         table.attach(userLabel, 0, 1, 0, 1, gtk.FILL, 0)
@@ -200,6 +238,7 @@ class MonLoginWindow(gtk.Window):
         table.attach(self.passEntry, 1, 2, 1, 2, gtk.EXPAND|gtk.FILL, 0)
         
         table.attach(self.cbSavePass, 1, 2, 2, 3, gtk.EXPAND|gtk.FILL, 0)
+        table.attach(self.cbAutoStart, 1, 2, 3, 4, gtk.EXPAND|gtk.FILL, 0)
         
         table.show()
         
@@ -236,35 +275,19 @@ class MonLoginWindow(gtk.Window):
         mainbox.show()
         return mainbox
     
+    def checkAutoStart(self, param):
+        self.cbSavePass.set_sensitive(not self.cbAutoStart.get_active())
+        if self.cbAutoStart.get_active():
+            self.cbSavePass.lastValue = self.cbSavePass.get_active()
+            self.cbSavePass.set_active(True)
+        else:
+            if hasattr(self.cbSavePass, "lastValue"):
+                self.cbSavePass.set_active(self.cbSavePass.lastValue)
+             
     def show(self):
         # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
         self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
         gtk.Window.show(self)
-      
-    def __init__(self, app):
-        self.app = app
-        gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
-
-        self.connect("delete-event", gtk.main_quit)
-        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
-
-        self.conf = self.readConfig()
-
-        #self.set_size_request(250, 150)
-        self.set_border_width(10)
-        self.set_title("Monitors - Login")
-        self.set_position(gtk.WIN_POS_CENTER)
-        self.set_modal(True)
-        
-        self.add(self.createControls())
-        
-        self.okButton.grab_default()
-
-        # Ajusta o controle inicial
-        if self.userEntry.get_text().strip() == '':
-            self.userEntry.grab_focus()
-        else:
-            self.passEntry.grab_focus()
 
     def run(self):
         if self.app.tryAutoLogin:
@@ -273,24 +296,29 @@ class MonLoginWindow(gtk.Window):
         self.show()
     
     def doLogin(self, user, passwd):
-        return self.app.startServices(user, passwd)
+        return self.app.login(user, passwd)
 
     def login(self, param):
-        user = self.userEntry.get_text()
+        user = self.userEntry.get_text().strip()
         passwd = self.passEntry.get_text()
-        if len(user.strip()) == 0 or len(passwd.strip()) == 0:
+        if len(user) == 0 or len(passwd.strip()) == 0:
             if self.get_property('visible'):
                 showMessage(u"Username and password are required.", "Monitors", self)
             return False
-        if self.doLogin(user, passwd):
-            self.conf.username = user
-            if self.cbSavePass.get_active():
-                self.conf.password = passwd
-            else:
-                self.conf.password = ''
-            self.conf.save()
-            self.destroy()
-            return True
+        try:
+          if self.doLogin(user, passwd):
+              self.conf.username = user
+              if self.cbSavePass.get_active() or self.cbAutoStart.get_active():
+                  self.conf.password = passwd
+              else:
+                  self.conf.password = ''
+              self.conf.setAutoStartEnabled(self.cbAutoStart.get_active())
+              self.conf.save()
+              self.app.startServices()
+              self.destroy()
+              return True
+        except Exception, e:
+            showMessage(str(e), "Error", self)
         return False
 
 #####################################################
@@ -298,9 +326,10 @@ class MonLoginWindow(gtk.Window):
 class MonConfig:
     username = ''
     password = ''
-    def __init__(self):
-        home = os.getenv('USERPROFILE') or os.getenv('HOME')
-        self.filename = os.path.join(home, ".monitors.cfg")
+    def __init__(self, app):
+        self.app = app
+        self.home = os.getenv('USERPROFILE') or os.getenv('HOME')
+        self.filename = os.path.join(self.home, ".monitors.cfg")
         self.config = ConfigParser.ConfigParser()
         self.config.read(self.filename)
         self.username = self.readOption('login', 'username', '')
@@ -344,6 +373,37 @@ class MonConfig:
             config.write(configfile)
         finally:
             configfile.close()
+    
+    def getAutoStartFileName(self):
+        fname = self.app.desktopFile
+        if fname == None or len(fname) == 0:
+            return None
+        autodir = os.path.join(os.getenv('XDG_CONFIG_HOME') or os.path.join(self.home, '.config'), 'autostart')
+        return os.path.join(autodir, fname)
+        
+    def isAutoStartEnabled(self):
+        autofile = self.getAutoStartFileName()
+        return autofile != None and os.path.exists(autofile)
+    
+    def setAutoStartEnabled(self, enabled):
+        autofile = self.getAutoStartFileName()
+        if autofile == None or enabled == self.isAutoStartEnabled():
+            return
+        if enabled:
+            # copy the autostart desktop file
+            source = self.app.desktopFile
+            if not os.path.isabs(source):
+                source = os.path.join(curdir, source)
+            f = open(source, 'r')
+            try:
+              content = f.read()
+              f.close()
+              f = open(autofile, 'w')
+              f.write(content)
+            finally:
+              f.close()
+        else:
+            os.remove(autofile)
 
 
 #####################################################
@@ -398,11 +458,13 @@ class ServiceRunner:
 class MonApp:
 
     def __init__(self):
+        self.fdlock = None
         self.services = []
         syslog.openlog('monitors')
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
-        self.tryAutoLogin = len(sys.argv) > 1 and sys.argv[1] == '-auto'
+        self.tryAutoLogin = len(sys.argv) > 1 and '-auto' in sys.argv[1:]
+        self.desktopFile = None
     
     def addService(self, serviceClass):
         self.services.append(ServiceRunner(self, serviceClass))
@@ -411,17 +473,19 @@ class MonApp:
         for s in self.services:
             s.quit()
         self.services = []
-        
-    #Retorna True se a janela de login puder ser fechada
-    def startServices(self, user, passwd):        
-        ok = True
+    
+    #Retorna True se o login teve sucesso
+    def login(self, user, passwd):
+        self.removeLock()
+        self.createLock(user)
         for service in self.services:
-          ok = ok and service.check(True, user, passwd)
-        
-        if ok:
-            for t in self.services:
-                t.start()
-        return ok
+            if not service.check(True, user, passwd):
+                return False
+        return True
+    
+    def startServices(self):
+        for t in self.services:
+            t.start()
 
     def serviceQuit(self, service):
         print "service quit", service
@@ -446,6 +510,8 @@ class MonApp:
         if running and wait:
             for t in self.services:
                 t.join()
+        
+        self.removeLock()
 
     def saveyourself(self, *args): #phase, save_style, is_shutdown, interact_style, is_fast):
         """ Chamado pelo gnome antes de fechar a sessão.
@@ -490,4 +556,27 @@ class MonApp:
             #self.gclient.connect_to_session_manager()
             self.gclient.connect("save-yourself", self.saveyourself)
             self.gclient.connect("die", self.die)
-  
+      
+    def lockError(self):
+        raise Exception(u"There is another instance running for this user")
+            
+    #Creates the lock file
+    def createLock(self, user):
+        lockfile = os.path.join(tempfile.gettempdir(), "monitors." + user + ".lock")
+        self.fdlock = os.open(lockfile, os.O_CREAT | os.O_RDWR)
+        if self.fdlock == -1:
+            self.lockError()
+        try:
+            fcntl.lockf(self.fdlock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except:
+            os.close(self.fdlock)
+            self.fdlock = None
+            self.lockError()
+    
+    def removeLock(self):
+        if self.fdlock is None or self.fdlock == -1:
+            return
+        
+        fcntl.lockf(self.fdlock, fcntl.LOCK_UN)
+        os.close(self.fdlock);
+        self.fdlock = None

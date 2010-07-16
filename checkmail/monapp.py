@@ -10,7 +10,7 @@ from monitors import MonApp, curdir, MonLoginWindow, MonConfig
 # MonLoginWindow
 class LoginWindow(MonLoginWindow):
     def readConfig(self):
-        return Config()
+        return Config(self.app)
       
     def createCustom(self, mainbox):
         self.cbEmail = gtk.CheckButton("_CheckMail")
