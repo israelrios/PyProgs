@@ -46,18 +46,18 @@ class ExpressoService(CheckMailService):
         if msgcount <= 5: # menos que 6 mensagens não pergunta ao usuário
             return True
         
-        msg = u"Delete %d messages from Expresso?" % msgcount
+        msg = _(u"Delete %d messages from Expresso?") % msgcount
         if self.haveNotify:
             if not "actions" in self.notifyCaps:
                 return True # se não suportar actions então nem mostra a notificação
             
             self.delMsgUserResponse = False
-            n = self.notify.Notification("Delete Messages?", msg, gtk.STOCK_DIALOG_QUESTION)
+            n = self.notify.Notification(_("Delete Messages?"), msg, gtk.STOCK_DIALOG_QUESTION)
             n.set_urgency(self.notify.URGENCY_NORMAL)
             n.set_timeout(self.notify.EXPIRES_NEVER)
-            n.add_action("default", "Abort", self.onMsgDelClick)
-            n.add_action("abort", "Abort", self.onMsgDelClick)
-            n.add_action("delete", "Delete", self.onMsgDelClick)
+            n.add_action("default", _("Abort"), self.onMsgDelClick)
+            n.add_action("abort", _("Abort"), self.onMsgDelClick)
+            n.add_action("delete", _("Delete"), self.onMsgDelClick)
             n.attach_to_status_icon(self.getTrayIcon())
             loop = gobject.MainLoop ()
             n.connect('closed', lambda sender: loop.quit())

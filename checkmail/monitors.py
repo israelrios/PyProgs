@@ -14,11 +14,14 @@ import signal
 import zlib
 import tempfile
 import fcntl
+import gettext
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
     
 curdir = os.path.abspath( os.path.dirname(sys.argv[0]) )
+
+gettext.install("monitors")
 
 class TrayIcon(gtk.StatusIcon):
     def __init__(self, service):
@@ -55,7 +58,7 @@ class TrayIcon(gtk.StatusIcon):
     
     def setInitialIcon(self):
         self.set_from_stock('gtk-execute')
-        self.set_tooltip("Loading - " + self.service.name)
+        self.set_tooltip(_("Loading - ") + self.service.name)
         self.set_visible(True)
 
     def destroy(self):
@@ -140,7 +143,7 @@ class Service(threading.Thread):
                 self.setIconError(str(e))
                 return True # se retornar False o timer para
             errortext = str(e)
-            gobject.idle_add(lambda: showMessage(errortext, "Error", type=gtk.MESSAGE_ERROR))
+            gobject.idle_add(lambda: showMessage(errortext, _("Error"), type=gtk.MESSAGE_ERROR))
             return False
         return True
 
@@ -148,7 +151,7 @@ class Service(threading.Thread):
         """ Must be called from main thread. Use gobject.idle_add """
         if self._trayicon == None:
             if not self.isAlive():
-                raise Exception("Canno't create tray icon: " + self.name + " is not running.")
+                raise Exception(_("Canno't create tray icon: ") + self.name + _(" is not running."))
             self._trayicon = self.createTrayIcon()
         return self._trayicon
 
@@ -194,7 +197,7 @@ class MonLoginWindow(gtk.Window):
     
     def createUserPass(self):
         # Load the login entry box
-        userLabel = gtk.Label("Username: ")
+        userLabel = gtk.Label(_("Username: "))
         userLabel.show()
 
         self.userEntry = gtk.Entry()
@@ -204,7 +207,7 @@ class MonLoginWindow(gtk.Window):
         self.userEntry.show()
 
         # Load the pass entry box
-        passLabel = gtk.Label("Password: ")
+        passLabel = gtk.Label(_("Password: "))
         passLabel.show()
 
         self.passEntry = gtk.Entry()
@@ -214,11 +217,11 @@ class MonLoginWindow(gtk.Window):
         self.passEntry.set_visibility(False)
         self.passEntry.show()
         
-        self.cbSavePass = gtk.CheckButton("Sa_ve Password")
+        self.cbSavePass = gtk.CheckButton(_("Sa_ve Password"))
         self.cbSavePass.show()
         self.cbSavePass.set_active(self.conf.password != '')
         
-        self.cbAutoStart = gtk.CheckButton("_Auto Start")
+        self.cbAutoStart = gtk.CheckButton(_("_Auto Start"))
         if self.app.desktopFile is None:
             self.cbAutoStart.hide()
         else:
@@ -291,7 +294,7 @@ class MonLoginWindow(gtk.Window):
         passwd = self.passEntry.get_text()
         if len(user) == 0 or len(passwd.strip()) == 0:
             if self.get_property('visible'):
-                showMessage(u"Username and password are required.", "Monitors", self)
+                showMessage(_(u"Username and password are required."), "Monitors", self)
             return False
         try:
           if self.doLogin(user, passwd):
@@ -306,7 +309,7 @@ class MonLoginWindow(gtk.Window):
               self.destroy()
               return True
         except Exception, e:
-            showMessage(str(e), "Error", self)
+            showMessage(str(e), _("Error"), self)
         return False
 
 #####################################################
@@ -546,7 +549,7 @@ class MonApp:
             self.gclient.connect("die", self.die)
       
     def lockError(self):
-        raise Exception(u"There is another instance running for this user")
+        raise Exception(_(u"There is another instance running for this user."))
             
     #Creates the lock file
     def createLock(self, user):

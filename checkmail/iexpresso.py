@@ -363,9 +363,9 @@ class ExpressoManager:
             url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
             self.logged = not url.geturl().startswith(self.urlLogin)
         except Exception, e:
-            raise LoginError(u"It was not possible to connect at Expresso. Error:\n\n" + str(e))
+            raise LoginError(_(u"It was not possible to connect at Expresso. Error:") + "\n\n" + str(e))
         if not self.logged:
-            raise LoginError(u"It was not possible to connect at Expresso. Check your password.")
+            raise LoginError(_(u"It was not possible to connect at Expresso. Check your password."))
     
     def listFolders(self):
         data = self.callExpresso(self.urlListFolders)
@@ -551,7 +551,7 @@ def unserialize(str):
         else:
             data = False
     else:
-        raise Exception('Invalid reponse format from Expresso.')
+        raise Exception(_('Invalid response format from Expresso.'))
         
     return data    
     
@@ -560,7 +560,7 @@ def checkImapError(typ, resp):
         if len(resp) > 0:
             raise Exception(resp[0])
         else:
-            raise Exception('Bad response.')
+            raise Exception(_('Bad response.'))
         
 class MsgItem():
     def __init__(self, msgid, msgfolder, msgflags):
@@ -634,7 +634,7 @@ class MsgList():
         line = file.readline().strip()
         if line != '3':
             log( line )
-            raise IExpressoError('DB file with wrong version.')
+            raise IExpressoError(_('DB file with wrong version.'))
         self.signature = file.readline().strip()
         self.isNew = False
         line = file.readline().strip()
@@ -693,23 +693,23 @@ class MailSynchronizer():
         for item in list:
             folder = getFolderPath(item)
             if not folder.startswith('INBOX'):
-                raise IExpressoError('Error loading local folders.')
+                raise IExpressoError(_('Error loading local folders.'))
             if folder != self.metadataFolder:
                 lst.append(folder)
         if len(lst) == 0:
-            raise IExpressoError('Error loading local folders.')
+            raise IExpressoError(_('Error loading local folders.'))
         return lst
     
     def checkPreConditions(self):
         maildir = '/home/' + self.user + '/Maildir'
         if os.path.exists(maildir):
             if not os.path.exists(self.dbpath):
-                raise IExpressoError('You must recreate your local INBOX.')
+                raise IExpressoError(_('You must recreate your local INBOX.'))
         elif os.path.exists(self.dbpath):
-            raise IExpressoError('You must remove the file "%s".' % self.dbpath)
+            raise IExpressoError(_('You must remove the file "%s".') % self.dbpath)
     
     def getQuotaStr(self):
-        return "%d%% of %dMB" % (self.es.quota, self.es.quotaLimit)
+        return _("%(quota)d%% of %(quotaLimit)dMB") % {"quota": self.es.quota, "quotaLimit": self.es.quotaLimit}
         
     def syncFolders(self):
         self.localFolders = self.getLocalFolders()
@@ -793,10 +793,10 @@ class MailSynchronizer():
                                 headers = m[1]
                                 moId = self.patMessageId.search(headers)
                                 if moId == None:
-                                    raise IExpressoError('Error loading local messages.')
+                                    raise IExpressoError(_('Error loading local messages.'))
                                 dbid = moId.group(1).strip()
                                 if dbid == '':
-                                    raise IExpressoError('Error loading local messages.')
+                                    raise IExpressoError(_('Error loading local messages.'))
                                 #if Sender exists put it in the dbid
                                 moSender = self.patSender.search(headers)
                                 if moSender != None:
@@ -817,7 +817,7 @@ class MailSynchronizer():
                 elif tryNum == 0:
                     log( 'Not all messages loaded from %s. Trying again.' % folder )
                 else:
-                    raise IExpressoError('Error loading local messages.')
+                    raise IExpressoError(_('Error loading local messages.'))
         self.closeLocalFolder()
         return localdb
     
@@ -919,7 +919,7 @@ class MailSynchronizer():
             if sig == None and localdb.isEmpty() and self.db.isNew:
                 self.storeLocalSignature()
             else:
-                raise IExpressoError('DB and INBOX signatures does not match.')
+                raise IExpressoError(_('DB and INBOX signatures does not match.'))
     
     def loadAllMsgs(self):
         log( '* Full refresh -', time.asctime() )
@@ -1110,7 +1110,7 @@ class MailSynchronizer():
                 for eid in todelete[folder]:
                     dbid = self.db.getId(eid, folder)
                     if dbid == None:
-                        raise IExpressoError('Error deleting messages from expresso.')
+                        raise IExpressoError(_('Error deleting messages from expresso.'))
                     self.db.delete(dbid)
     
     def flagMessagesExpresso(self, toflag, newflags):

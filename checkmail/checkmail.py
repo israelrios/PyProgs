@@ -67,14 +67,14 @@ class CheckMailService(Service):
     
     def idleShowNotify(self, tip):
         iconname = 'file://' + os.path.join(curdir, 'mail-unread.svg')
-        n = self.notify.Notification("New Mail", tip, iconname)
+        n = self.notify.Notification(_("New Mail"), tip, iconname)
         n.set_urgency(self.notify.URGENCY_NORMAL)
         n.set_timeout(10000) # 10 segundos
         n.attach_to_status_icon(self.getTrayIcon())
         if "actions" in self.notifyCaps:
           loop = gobject.MainLoop ()
           n.connect('closed', lambda sender: loop.quit())
-          n.add_action("default", "Open Mail", self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
+          n.add_action("default", _("Open Mail"), self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
           n.show()
           loop.run() #sem o loop não funciona a action da notificação
         else:
@@ -125,7 +125,7 @@ class CheckMailService(Service):
         if hasmail:
             tip = '* ' + '\n* '.join(subjects)
         else:
-            tip = 'No new email'
+            tip = _('No new email')
         self.setIcon(hasmail, self.processTip(subjects, tip))
         
         if self.haveNotify:
@@ -176,11 +176,11 @@ class CheckMailService(Service):
 
             return subjects
         except Exception, e:
-            raise Exception(u"It was not possible to check your mail box. Error:\n\n" + str(e))
+            raise Exception(_(u"It was not possible to check your mail box. Error:") + "\n\n" + str(e))
 
     def parseError(self, typ, msgnums):
         if typ != 'OK':
             if len(msgnums) > 0:
                 raise Exception(msgnums[0])
             else:
-                raise Exception('Bad response.')
+                raise Exception(_('Bad response.'))

@@ -1,0 +1,140 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2010-07-19 16:36-0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ../monitors.py:154
+msgid " is not running."
+msgstr ""
+
+#: ../iexpresso.py:712
+#, python-format
+msgid "%(quota)d%% of %(quotaLimit)dMB"
+msgstr ""
+
+#: ../expresso.py:58 ../expresso.py:59
+msgid "Abort"
+msgstr ""
+
+#: ../checkmail.py:186 ../iexpresso.py:563
+msgid "Bad response."
+msgstr ""
+
+#: ../monitors.py:154
+msgid "Canno't create tray icon: "
+msgstr ""
+
+#: ../iexpresso.py:922
+msgid "DB and INBOX signatures does not match."
+msgstr ""
+
+#: ../iexpresso.py:637
+msgid "DB file with wrong version."
+msgstr ""
+
+#: ../expresso.py:60
+msgid "Delete"
+msgstr ""
+
+#: ../expresso.py:49
+#, python-format
+msgid "Delete %d messages from Expresso?"
+msgstr ""
+
+#: ../expresso.py:55
+msgid "Delete Messages?"
+msgstr ""
+
+#: ../monitors.py:146 ../monitors.py:312
+msgid "Error"
+msgstr ""
+
+#: ../iexpresso.py:1113
+msgid "Error deleting messages from expresso."
+msgstr ""
+
+#: ../iexpresso.py:696 ../iexpresso.py:700
+msgid "Error loading local folders."
+msgstr ""
+
+#: ../iexpresso.py:796 ../iexpresso.py:799 ../iexpresso.py:820
+msgid "Error loading local messages."
+msgstr ""
+
+#: ../iexpresso.py:554
+msgid "Invalid response format from Expresso."
+msgstr ""
+
+#: ../checkmail.py:179
+msgid "It was not possible to check your mail box. Error:"
+msgstr ""
+
+#: ../iexpresso.py:368
+msgid "It was not possible to connect at Expresso. Check your password."
+msgstr ""
+
+#: ../iexpresso.py:366
+msgid "It was not possible to connect at Expresso. Error:"
+msgstr ""
+
+#: ../monitors.py:61
+msgid "Loading - "
+msgstr ""
+
+#: ../checkmail.py:70
+msgid "New Mail"
+msgstr ""
+
+#: ../checkmail.py:128
+msgid "No new email"
+msgstr ""
+
+#: ../checkmail.py:77
+msgid "Open Mail"
+msgstr ""
+
+#: ../monitors.py:210
+msgid "Password: "
+msgstr ""
+
+#: ../monitors.py:220
+msgid "Sa_ve Password"
+msgstr ""
+
+#: ../monitors.py:552
+msgid "There is another instance running for this user."
+msgstr ""
+
+#: ../monitors.py:297
+msgid "Username and password are required."
+msgstr ""
+
+#: ../monitors.py:200
+msgid "Username: "
+msgstr ""
+
+#: ../iexpresso.py:707
+msgid "You must recreate your local INBOX."
+msgstr ""
+
+#: ../iexpresso.py:709
+#, python-format
+msgid "You must remove the file \"%s\"."
+msgstr ""
+
+#: ../monitors.py:224
+msgid "_Auto Start"
+msgstr ""
