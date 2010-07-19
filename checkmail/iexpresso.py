@@ -310,6 +310,7 @@ class ExpressoManager:
     urlSetFlags = urlImapFunc + 'set_messages_flag&'
     urlGetMsg = urlImapFunc + 'get_info_msg&'
     urlCreateFolder = urlImapFunc + 'create_mailbox&'
+    urlDeleteFolder = urlImapFunc + 'delete_mailbox&'
     urlDownloadMessages = urlExpresso + 'expressoMail1_2/inc/gotodownload.php?msg_folder=null&msg_number=null&msg_part=null&newfilename=mensagens.zip&'
     urlMakeEml = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.makeAll'
     urlExportMsg = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.export_msg'
@@ -380,7 +381,11 @@ class ExpressoManager:
         return folders
     
     def createFolder(self, path):
-        self.callExpresso(self.urlCreateFolder, {'newp': path.encode('iso-8859-1')})
+        self.callExpresso(self.urlCreateFolder, {'newp': path.encode('utf-8')})
+    
+    def deleteFolder(self, path):
+        """ Cuidado! Exclui também as mensagens que estão dentro da pasta """
+        self.callExpresso(self.urlDeleteFolder, {'del_past': path.encode('utf-8')})
     
     def getMsg(self, msgfolder, msgid):
         return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid, 'msg_folder' : msgfolder.encode('iso-8859-1')}))
