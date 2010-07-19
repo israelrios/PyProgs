@@ -1,0 +1,22 @@
+application: debrepo
+version: 1
+runtime: python
+api_version: 1
+
+skip_files: |
+ ^(.*/)?(
+ (app\.yaml)|
+ (app\.yml)|
+ (index\.yaml)|
+ (index\.yml)|
+ (#.*#)|
+ (.*~)|
+ (.*\.py[co])|
+ (.*/RCS/.*)|
+ (\..*)|
+ (deb/(conf|db)/.*)
+ )$
+
+handlers:
+- url: /.*
+  script: server.py
