@@ -1124,7 +1124,7 @@ class MailSynchronizer():
     def createFolderExpresso(self, newfolder):
         if not newfolder in self.efolders:
             self.es.createFolder(newfolder) #cria a pasta no expresso
-            self.efolders.append(newfolder)
+            self.efolders.add(newfolder)
                             
     def moveMessagesExpresso(self, tomove):
         # move as mensagens
