@@ -6,135 +6,135 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: pt_BR\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-07-19 16:44-0300\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"POT-Creation-Date: 2010-07-19 16:28-0300\n"
+"PO-Revision-Date: 2010-07-19 09:02-0300\n"
+"Last-Translator: Israel Rios\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
 #: ../monitors.py:154
 msgid " is not running."
-msgstr ""
+msgstr " não está rodando."
 
 #: ../iexpresso.py:712
 #, python-format
 msgid "%(quota)d%% of %(quotaLimit)dMB"
-msgstr ""
+msgstr "%(quota)d%% de %(quotaLimit)dMB"
 
 #: ../expresso.py:58 ../expresso.py:59
 msgid "Abort"
-msgstr ""
+msgstr "Abortar"
 
 #: ../checkmail.py:186 ../iexpresso.py:563
 msgid "Bad response."
-msgstr ""
+msgstr "Resposta Inválida."
 
 #: ../monitors.py:154
 msgid "Canno't create tray icon: "
-msgstr ""
+msgstr "Não foi possível criar o ícone de status: "
 
 #: ../iexpresso.py:922
 msgid "DB and INBOX signatures does not match."
-msgstr ""
+msgstr "Assinaturas de DB e INBOX não combinam."
 
 #: ../iexpresso.py:637
 msgid "DB file with wrong version."
-msgstr ""
+msgstr "A versão do arquivo DB não é suportada."
 
 #: ../expresso.py:60
 msgid "Delete"
-msgstr ""
+msgstr "Excluir"
 
 #: ../expresso.py:49
 #, python-format
 msgid "Delete %d messages from Expresso?"
-msgstr ""
+msgstr "Excluir %d mensagens no Expresso?"
 
 #: ../expresso.py:55
 msgid "Delete Messages?"
-msgstr ""
+msgstr "Excluir Mensagens?"
 
 #: ../monitors.py:146 ../monitors.py:312
 msgid "Error"
-msgstr ""
+msgstr "Erro"
 
 #: ../iexpresso.py:1113
 msgid "Error deleting messages from expresso."
-msgstr ""
+msgstr "Erro ao excluir mensagens no expresso."
 
 #: ../iexpresso.py:696 ../iexpresso.py:700
 msgid "Error loading local folders."
-msgstr ""
+msgstr "Erro carregando pastas locais."
 
 #: ../iexpresso.py:796 ../iexpresso.py:799 ../iexpresso.py:820
 msgid "Error loading local messages."
-msgstr ""
+msgstr "Erro carregando mensagens locais."
 
 #: ../iexpresso.py:554
 msgid "Invalid response format from Expresso."
-msgstr ""
+msgstr "O formato da resposta do Expresso é inválido."
 
 #: ../checkmail.py:179
 msgid "It was not possible to check your mail box. Error:"
-msgstr ""
+msgstr "Não foi possível verificar o seu email. Erro:"
 
 #: ../iexpresso.py:368
 msgid "It was not possible to connect at Expresso. Check your password."
-msgstr ""
+msgstr "Não foi possível conectar no Expresso. Verifique a sua senha."
 
 #: ../iexpresso.py:366
 msgid "It was not possible to connect at Expresso. Error:"
-msgstr ""
+msgstr "Não foi possível conectar no Expresso. Erro:"
 
 #: ../monitors.py:61
 msgid "Loading - "
-msgstr ""
+msgstr "Carregando - "
 
 #: ../checkmail.py:70
 msgid "New Mail"
-msgstr ""
+msgstr "Novo e-mail"
 
 #: ../checkmail.py:128
 msgid "No new email"
-msgstr ""
+msgstr "Sem novos e-mails"
 
 #: ../checkmail.py:77
 msgid "Open Mail"
-msgstr ""
+msgstr "Abrir E-Mail"
 
 #: ../monitors.py:210
 msgid "Password: "
-msgstr ""
+msgstr "Senha: "
 
 #: ../monitors.py:220
 msgid "Sa_ve Password"
-msgstr ""
+msgstr "Sal_var Senha"
 
 #: ../monitors.py:552
 msgid "There is another instance running for this user."
-msgstr ""
+msgstr "Existe uma outra instância em execução para este usuário."
 
 #: ../monitors.py:297
 msgid "Username and password are required."
-msgstr ""
+msgstr "Usuário e senha são obrigatórios."
 
 #: ../monitors.py:200
 msgid "Username: "
-msgstr ""
+msgstr "Usuário: "
 
 #: ../iexpresso.py:707
 msgid "You must recreate your local INBOX."
-msgstr ""
+msgstr "Você deve recriar a sua INBOX local."
 
 #: ../iexpresso.py:709
 #, python-format
 msgid "You must remove the file \"%s\"."
-msgstr ""
+msgstr "Você deve remover o arquivo \"%s\"."
 
 #: ../monitors.py:224
 msgid "_Auto Start"
-msgstr ""
+msgstr "_Auto Iniciar"
