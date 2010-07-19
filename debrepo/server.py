@@ -6,18 +6,22 @@ __author__ = "Israel Rios (isrrios@gmail.com)"
 import wsgiref.handlers
 from google.appengine.ext import webapp
 import os.path
-
+from google.appengine.ext.webapp import template
 
 mime_map = {
             '.deb':'application/x-debian-package',
             '.gz':'application/x-gzip'
             }
 
+class MainHandler(webapp.RequestHandler):
+  def get(self):
+    self.response.out.write(template.render("main.html", {}))
+
 class DebHandler(webapp.RequestHandler):
   def get(self, filename):
     
     fpath = os.path.join('deb', filename)
-    if not os.path.exists(fpath):
+    if not os.path.isfile(fpath):
       return self.error(404)
     
     f = open(fpath, 'rb')
@@ -32,7 +36,8 @@ class DebHandler(webapp.RequestHandler):
       f.close()
 
 app = webapp.WSGIApplication([
-  (r"/(.*)", DebHandler)
+  (r"/(.+)", DebHandler),
+  (r"/", MainHandler)
 ], debug=False)
 
 
