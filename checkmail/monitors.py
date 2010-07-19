@@ -218,15 +218,12 @@ class MonLoginWindow(gtk.Window):
         self.cbSavePass.show()
         self.cbSavePass.set_active(self.conf.password != '')
         
-        self.cbAutoStart = gtk.CheckButton("Auto Start")
+        self.cbAutoStart = gtk.CheckButton("_Auto Start")
         if self.app.desktopFile is None:
             self.cbAutoStart.hide()
         else:
             self.cbAutoStart.show()
             self.cbAutoStart.set_active(self.conf.isAutoStartEnabled())
-            self.cbAutoStart.connect("clicked", self.checkAutoStart)
-            
-            self.checkAutoStart(None)
 
         table = gtk.Table(4, 2)
         table.set_row_spacings(8)
@@ -274,15 +271,6 @@ class MonLoginWindow(gtk.Window):
         mainbox.pack_end(self.createButtons(), False, True, 0)
         mainbox.show()
         return mainbox
-    
-    def checkAutoStart(self, param):
-        self.cbSavePass.set_sensitive(not self.cbAutoStart.get_active())
-        if self.cbAutoStart.get_active():
-            self.cbSavePass.lastValue = self.cbSavePass.get_active()
-            self.cbSavePass.set_active(True)
-        else:
-            if hasattr(self.cbSavePass, "lastValue"):
-                self.cbSavePass.set_active(self.cbSavePass.lastValue)
              
     def show(self):
         # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
