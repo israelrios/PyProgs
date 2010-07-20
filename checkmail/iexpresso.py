@@ -56,6 +56,21 @@ def log(*params):
 def logError():
     log(traceback.format_exc())
 
+def compressLog():
+    """Compress the log file if it is large enough."""
+    # larger than 2MB
+    if os.path.exists(logfile) and os.path.getsize(logfile) > (2 * 1024 * 1024):
+        logfilezip = logfile + ".zip"
+        if os.path.exists(logfilezip):
+            os.remove(logfilezip)
+            
+        zf = zipfile.ZipFile(logfilezip, 'w', zipfile.ZIP_DEFLATED)
+        try:
+            zf.write(logfile, os.path.split(logfile)[1])
+        finally:
+            zf.close()
+        os.remove(logfile)
+
 class IExpressoError(Exception):
     pass
 
@@ -922,6 +937,7 @@ class MailSynchronizer():
                 raise IExpressoError(_('DB and INBOX signatures does not match.'))
     
     def loadAllMsgs(self):
+        compressLog()
         log( '* Full refresh -', time.asctime() )
         try:
             localdb = self.initUpdate() 
