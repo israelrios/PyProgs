@@ -1201,7 +1201,6 @@ class MailSynchronizer():
                     diff = self.flagsdiff(msgflags, eflags)
                     if len(diff) > 0:
                         newflags[id] = self.mapFlagsExpresso(toflag, eid, efolder, eflags, diff)
-                        log( diff, msgflags, eflags)
             elif doImport:
                 if msgflags.find(r'\Deleted') < 0 and not msgfolder.endswith('/Trash'):
                     #por enquanto só importa itens que tenham um Message-ID
