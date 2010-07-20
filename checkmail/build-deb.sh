@@ -23,11 +23,12 @@ cp -a {mail-read.png,mail-unread.{png,svg}} $dir
 cp iexpresso-auto.desktop $dir
 cp dovecot.conf $dir
 
-#build mo's
-cd po
-./refresh_po.sh
-cd ..
+#refresh po's
+#cd po
+#./refresh_po.sh
+#cd ..
 
+#build mo's
 localedir="${basedir}/locale"
 if [ -d $localedir ]; then
 	rm -rf "$localedir"
@@ -42,6 +43,11 @@ for f in $pofiles; do
 	fi
 	msgfmt --output-file="${langdir}/$appmo" "po/$f"
 done
+
+#update version
+version=`python -c "import monitors; print monitors.version"`
+control=`cat deb/DEBIAN/control.in`
+echo "${control//'%%version%%'/${version}}" > deb/DEBIAN/control
 
 #build deb
 fakeroot dpkg-deb -b deb ..

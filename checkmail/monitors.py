@@ -16,6 +16,8 @@ import tempfile
 import fcntl
 import gettext
 
+version = "1.4"
+
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
     
@@ -178,7 +180,7 @@ class MonLoginWindow(gtk.Window):
 
         #self.set_size_request(250, 150)
         self.set_border_width(10)
-        self.set_title("Monitors - Login")
+        self.set_title("Monitors %s - Login" % version)
         self.set_position(gtk.WIN_POS_CENTER)
         self.set_modal(True)
         
