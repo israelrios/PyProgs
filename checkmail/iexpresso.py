@@ -600,7 +600,7 @@ class MsgList():
         self.eindex = {}
         self.signature = u'<%f_%d@localhost.signature>' % (time.time(), random.randint(0,100000))
         self.isNew = True
-        self.folders = None
+        self.folders = set()
         self.updated = True # quando alguma mensagem foi adicionada ou excluída
         self.msgupdated = False # quando algum flag da mensagem foi modificado ou a mensagem foi movida
         
