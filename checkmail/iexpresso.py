@@ -397,11 +397,15 @@ class ExpressoManager:
         return folders
     
     def createFolder(self, path):
-        self.callExpresso(self.urlCreateFolder, {'newp': path.encode('utf-8')})
+        res = self.callExpresso(self.urlCreateFolder, {'newp': path.encode('utf-8')})
+        if res.lower() != 'ok':
+            raise Exception(res.replace('<br />', ''))
     
     def deleteFolder(self, path):
         """ Cuidado! Exclui também as mensagens que estão dentro da pasta """
-        self.callExpresso(self.urlDeleteFolder, {'del_past': path.encode('utf-8')})
+        res = self.callExpresso(self.urlDeleteFolder, {'del_past': path.encode('utf-8')})
+        if res.lower() != 'ok':
+            raise Exception(res.replace('<br />', ''))
     
     def getMsg(self, msgfolder, msgid):
         return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid, 'msg_folder' : msgfolder.encode('iso-8859-1')}))
@@ -1014,8 +1018,7 @@ class MailSynchronizer():
         log( 'OK' )
         
     def initUpdate(self):
-        self.updatedFolders = set()
-        
+
         if not self.es.logged:
             self.es.doLogin()
         
@@ -1128,6 +1131,7 @@ class MailSynchronizer():
             self.closeLocalFolder()
             
     def checkDeletedFolders(self):
+        """Remove pastas do expresso que foram excluídas localmente."""
         removedFolders = set()
         try:
             for efolder in self.db.folders:
@@ -1178,8 +1182,6 @@ class MailSynchronizer():
             elif len(msgs) > 1:
                 #adiciona com id falso para evitar que o email seja reenviado em caso de erro após esta parte
                 self.db.update(dbid, -localid, folder, localflags)
-            else:
-                self.updatedFolders.add(folder)
         self.closeLocalFolder()
         
     def askDeleteMessages(self, todelete):
@@ -1199,8 +1201,8 @@ class MailSynchronizer():
                     strids = ','.join([str(eid) for eid in todelete[folder]])
                     log( 'Deleting messages from Expresso. Ids: %s   folder: %s' % (strids, folder) )
                     self.es.deleteMsgs(strids, folder)
-                    self.updatedFolders.add(folder)
-                #atualiza o banco, se skipExpresso for True as mensagens serão recarregadas da próxima vez que houver full refresh
+                #atualiza o banco, se skipExpresso for True as mensagens serão recarregadas
+                # da próxima vez que houver full refresh
                 for eid in todelete[folder]:
                     dbid = self.db.getId(eid, folder)
                     if dbid == None:
@@ -1222,6 +1224,7 @@ class MailSynchronizer():
     
     def createFolderExpresso(self, newfolder):
         if not newfolder in self.db.folders:
+            log( "Creating folder on Expresso:", newfolder )
             self.es.createFolder(newfolder) #cria a pasta no expresso
             self.db.folders.add(newfolder)
                             
@@ -1232,7 +1235,6 @@ class MailSynchronizer():
             log( 'Moving ids: %s   folder: %s   newfolder: %s' % (strids, efolder, newfolder) )
             self.createFolderExpresso(newfolder)
             self.es.moveMsgs(strids, efolder, newfolder)
-            self.updatedFolders.add(newfolder)
     
     def changeExpresso(self, localdb, doImport = False, doMove = False, doDelete = False):
         #verifica as mensagens que não existem mais na caixa local
