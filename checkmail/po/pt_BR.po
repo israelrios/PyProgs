@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pt_BR\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-07-20 11:36-0300\n"
+"POT-Creation-Date: 2010-07-21 11:13-0300\n"
 "PO-Revision-Date: 2010-07-19 09:02-0300\n"
 "Last-Translator: Israel Rios\n"
 "Language-Team: \n"
@@ -35,9 +35,6 @@ msgstr "Não foi possível criar o ícone de status: "
 msgid "DB and INBOX signatures does not match."
 msgstr "Assinaturas de DB e INBOX não combinam."
 
-msgid "DB file with wrong version."
-msgstr "A versão do arquivo DB não é suportada."
-
 msgid "Delete"
 msgstr "Excluir"
 
@@ -55,10 +52,13 @@ msgid "Error deleting messages from expresso."
 msgstr "Erro ao excluir mensagens no expresso."
 
 msgid "Error loading local folders."
-msgstr "Erro carregando pastas locais."
+msgstr "Erro ao carregar pastas locais."
 
 msgid "Error loading local messages."
-msgstr "Erro carregando mensagens locais."
+msgstr "Erro ao carregar mensagens locais."
+
+msgid "Error loading messages from Expresso."
+msgstr "Erro ao carregar as mensagens do Expresso."
 
 msgid "Invalid response format from Expresso."
 msgstr "O formato da resposta do Expresso é inválido."
@@ -92,6 +92,9 @@ msgstr "Sal_var Senha"
 
 msgid "There is another instance running for this user."
 msgstr "Existe uma outra instância em execução para este usuário."
+
+msgid "Unsupported DB version."
+msgstr "A versão do banco de mensagens não é suportada."
 
 msgid "Username and password are required."
 msgstr "Usuário e senha são obrigatórios."
