@@ -6,12 +6,6 @@ if [ "$curdir" == "/" ]; then
 	exit
 fi
 
-pack="iexpresso.deb"
-
-if [ -a $pack ]; then
-	rm $pack
-fi
-
 basedir="deb/usr/share"
 
 rm -rf $optdir
@@ -53,3 +47,11 @@ echo "${control//'%%version%%'/${version}}" > deb/DEBIAN/control
 fakeroot dpkg-deb -b deb ..
 
 rm -rf $dir
+
+#upload
+if [ "$1" == '-upload' ]; then
+	debrepo=../debrepo
+	reprepro -b $debrepo/deb/ remove stable iexpresso
+	reprepro -b $debrepo/deb/ includedeb stable "../iexpresso_${version}_all.deb" && \
+		${HOME}/dev/google_appengine/appcfg.py update $debrepo
+fi
