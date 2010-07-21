@@ -680,7 +680,7 @@ class MailSynchronizer():
             self.client = imaplib.IMAP4('localhost')
             self.client.login(self.user, self.password)
         except Exception, e:
-            raise LoginError(e.message)
+            raise LoginError(str(e))
     
     def login(self, user, password):
         self.user = user
@@ -708,10 +708,10 @@ class MailSynchronizer():
         for item in list:
             folder = getFolderPath(item)
             if not folder.startswith('INBOX'):
-                raise IExpressoError(_('Error loading local folders.'))
+                continue
             if folder != self.metadataFolder:
                 lst.append(folder)
-        if len(lst) == 0:
+        if len(lst) == 0 or not 'INBOX' in lst:
             raise IExpressoError(_('Error loading local folders.'))
         return lst
     
@@ -1263,6 +1263,9 @@ def getFolderPath(str):
     
 if __name__ == "__main__":
     import getpass
+
+    def _(s):
+        return s
     
     if not os.path.exists(iexpressodir):
         os.mkdir(iexpressodir)
@@ -1284,6 +1287,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     except IExpressoError, e:
-        log( "*** Error:", e.message )
+        log( "*** Error:", str(e) )
 
 
