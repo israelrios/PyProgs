@@ -180,7 +180,7 @@ class MonLoginWindow(gtk.Window):
 
         #self.set_size_request(250, 150)
         self.set_border_width(10)
-        self.set_title("Monitors %s - Login" % version)
+        self.set_title("%s %s - Login" % (self.app.name, version))
         self.set_position(gtk.WIN_POS_CENTER)
         self.set_modal(True)
         
@@ -453,6 +453,7 @@ class MonApp:
     def __init__(self):
         self.fdlock = None
         self.services = []
+        self.name = 'Monitors'
         syslog.openlog('monitors')
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
