@@ -141,13 +141,11 @@ class Service(threading.Thread):
             return True
         except Exception, e:
             syslog.syslog(syslog.LOG_USER | syslog.LOG_ERR, traceback.format_exc(8))
-            if timered :
-                self.setIconError(str(e))
-                return True # se retornar False o timer para
             errortext = str(e)
-            gobject.idle_add(lambda: showMessage(errortext, _("Error"), type=gtk.MESSAGE_ERROR))
+            self.setIconError(errortext)
+            if not timered and self != threading.currentThread():
+                raise
             return False
-        return True
 
     def getTrayIcon(self):
         """ Must be called from main thread. Use gobject.idle_add """
@@ -296,7 +294,7 @@ class MonLoginWindow(gtk.Window):
         passwd = self.passEntry.get_text()
         if len(user) == 0 or len(passwd.strip()) == 0:
             if self.get_property('visible'):
-                showMessage(_(u"Username and password are required."), "Monitors", self)
+                showMessage(_(u"Username and password are required."), self.app.name, self)
             return False
         try:
           if self.doLogin(user, passwd):
@@ -544,7 +542,7 @@ class MonApp:
         except:
             pass
         else:
-            gnome.program_init('monitors', '2.0')
+            gnome.program_init(self.name, version)
             self.gclient = gnome.ui.master_client()
             #self.gclient = gnome.ui.Client()
             #self.gclient.connect_to_session_manager()
