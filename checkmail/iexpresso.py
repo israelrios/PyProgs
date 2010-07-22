@@ -333,7 +333,7 @@ class ExpressoManager:
     urlDownloadMessages = urlExpresso + 'expressoMail1_2/inc/gotodownload.php?msg_folder=null&msg_number=null&msg_part=null&newfilename=mensagens.zip&'
     urlMakeEml = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.makeAll'
     urlExportMsg = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.export_msg'
-    urlImportMsgs = urlExpresso + 'expressoMail1_2/controller.php'
+    urlController = urlExpresso + 'expressoMail1_2/controller.php'
     urlGetReturnExecuteForm = urlExpresso + 'expressoMail1_2/controller.php?action=$this.functions.getReturnExecuteForm'
     urlDeleteMsgs = urlImapFunc + 'delete_msgs&border_ID=null&'
     urlInitRules = urlExpresso + 'expressoMail1_2/controller.php?action=$this.ScriptS.init_a'
@@ -368,6 +368,7 @@ class ExpressoManager:
         #log( surl )
         url = self.opener.open(surl, params)
         if url.geturl().startswith(self.urlLogin):
+            url.close()
             self.doLogin()
             url = self.opener.open(surl, params)
         return url
@@ -375,12 +376,14 @@ class ExpressoManager:
     def callExpresso(self, surl, params = None, post = False):
         url = self.openUrl(surl, params, post)    
         response = url.read().decode('iso-8859-1')
+        url.close()
         return unserialize(response)
     
     def doLogin(self):
         try:
             url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
             self.logged = not url.geturl().startswith(self.urlLogin)
+            url.close()
         except Exception, e:
             raise LoginError(_(u"It was not possible to connect at Expresso. Error:") + "\n\n" + str(e))
         if not self.logged:
@@ -419,7 +422,7 @@ class ExpressoManager:
         if not idx_file:
             return None
         
-        url = self.opener.open(self.urlDownloadMessages + urllib.urlencode({'idx_file': idx_file}, True))
+        url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
         try:
             zfile = zipfile.ZipFile(StringIO(url.read()))
             msgs = {}
@@ -430,6 +433,8 @@ class ExpressoManager:
         except zipfile.BadZipfile, e:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
             return None
+        finally:
+            url.close()
         return msgs
     
     def getFullMsgEspecial(self, msgfolder, msgid):
@@ -439,16 +444,32 @@ class ExpressoManager:
         if not idx_file:
             return None
         
-        url = self.opener.open(self.urlDownloadMessages + urllib.urlencode({'idx_file': idx_file}, True))
-        return str(url.read())
+        url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
+        source = str(url.read())
+        url.close()
+        return source
     
     def importMsgs(self, msgfolder, file):
-        url = self.openUrl(self.urlImportMsgs, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
+        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
                                                     'countFiles': 1, 'file_1' : file}, True)
+        url.close()
         #verifica se aconteceu algum erro
         result = self.callExpresso(self.urlGetReturnExecuteForm)
         if 'error' in result and result['error'].strip() != '':
             raise Exception(result['error'])
+    
+    def importMsgWithTime(self, msgfolder, source, msgtime):
+        """ Faz o import com o método unarchive_mail.
+            Este método possibilita a informação da data da mensagem. """
+        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.unarchive_mail',
+                                                    'source': source, 'timestamp' : msgtime}, True)
+        url.close()
+        #verifica se aconteceu algum erro
+        result = self.callExpresso(self.urlGetReturnExecuteForm)
+        if 'error' in result and not isinstance(result['error'], bool) and result['error'].strip() != '':
+            raise Exception(result['error'])
+        #no result tem o número da mensagem inserida dentro da pasta
+        #return result['msg_no']
         
     def setMsgFlag(self, msgfolder, msgid, flag):
         self.callExpresso(self.urlSetFlags, {'flag': flag.lower(), 'msgs_to_set' : msgid, 'folder' : msgfolder.encode('iso-8859-1')})
@@ -738,6 +759,12 @@ class MailSynchronizer():
         self.defaultFolders = frozenset(['INBOX', 'INBOX/Sent', 'INBOX/Trash', 'INBOX/Drafts'])
         self.patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
         self.patMessageId = re.compile('^Message-Id: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+        #Date: Mon, 21 Jun 2010 10:16:39 -0300
+        self.patDate = re.compile(
+          r'^Date: (?:(?P<wday>[A-Z][a-z][a-z]), )?(?P<day>[0123]?[0-9])'
+          r' (?P<mon>[A-Z][a-z][a-z]) (?P<year>[0-9][0-9][0-9][0-9])'
+          r' (?P<hour>[0-9][0-9]):(?P<min>[0-9][0-9]):(?P<sec>[0-9][0-9])'
+          r' (?P<zonen>[-+])(?P<zoneh>[0-9][0-9])(?P<zonem>[0-9][0-9])[\r\n]', re.MULTILINE)
         
     def loginLocal(self):
         try:
@@ -1166,18 +1193,25 @@ class MailSynchronizer():
     
     def importMsgExpresso(self, folder, localid, localflags, dbid):
         log( 'Importing id: %d to folder: %s  dbid: %s' % (localid, folder, dbid) )
+        
         self.client.select(folder.encode('imap4-utf-7'), True)
         msgsrc = self.client.fetch(str(localid), '(RFC822.HEADER RFC822.TEXT)')
         if msgsrc[0] == 'OK' and len(msgsrc[1]) >= 2:
-            msgfile = NamedStringIO('email.eml')
+            
             msgheader = msgsrc[1][0][1]
-            if msgheader.startswith('>'): # correção de bug, algumas mensagens eram gravadas com o ">" no começo pelo EmailGenerator
-                msgheader = msgheader[1:]
-            msgfile.write(msgheader)
-            msgfile.write(msgsrc[1][1][1])
-            msgfile.seek(0)
+            msgbody = msgsrc[1][1][1]
+            
             self.createFolderExpresso(folder)
-            self.es.importMsgs(folder, msgfile)
+            date = self.getMessageDateAsInt(msgheader)
+            if not date is None:
+                self.es.importMsgWithTime(folder, msgheader + msgbody, date)
+            else:
+                log('Importing message without date info.')
+                msgfile = NamedStringIO('email.eml')
+                msgfile.write(msgheader)
+                msgfile.write(msgbody)
+                msgfile.seek(0)
+                self.es.importMsgs(folder, msgfile)
             #procura o id da mensagem importada
             moId = self.patMessageId.search(msgheader)
             if moId == None:
@@ -1185,7 +1219,7 @@ class MailSynchronizer():
             else:
                 msgid = moId.group(1).strip()
                 log('Searching Message-ID:', msgid) 
-            msgs = self.es.getMsgs('RECENT TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços
+            msgs = self.es.getMsgs('TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços            
             if len(msgs) >= 1:
                 msg = msgs[-1] # pega a última
                 self.db.update(dbid, msg.id, folder, msg.getFlags(), msg.hashid)
@@ -1343,6 +1377,48 @@ class MailSynchronizer():
         if r'\Flagged' in flags2 and not r'\Flagged' in flags1:
             diff.append(r'\Unflagged')
         return diff
+    
+    def getMessageDateAsInt(self, msgsource):
+        """Convert MESSAGE Date to UT.
+        Returns Python date as int.
+        Adapted from imaplib.Internaldate2tuple
+        """
+        mo = self.patDate.search(msgsource)
+        if not mo:
+            return None
+    
+        mon = imaplib.Mon2num[mo.group('mon')]
+        zonen = mo.group('zonen')
+    
+        day = int(mo.group('day'))
+        year = int(mo.group('year'))
+        hour = int(mo.group('hour'))
+        min = int(mo.group('min'))
+        sec = int(mo.group('sec'))
+        zoneh = int(mo.group('zoneh'))
+        zonem = int(mo.group('zonem'))
+    
+        # timezone must be subtracted to get UT
+
+        zone = (zoneh*60 + zonem)*60
+        if zonen == '-':
+            zone = -zone
+    
+        tt = (year, mon, day, hour, min, sec, -1, -1, -1)
+    
+        utc = time.mktime(tt)
+    
+        # Following is necessary because the time module has no 'mkgmtime'.
+        # 'mktime' assumes arg in local timezone, so adds timezone/altzone.
+    
+        lt = time.localtime(utc)
+        if time.daylight and lt[-1]:
+            zone = zone + time.altzone
+        else:
+            zone = zone + time.timezone
+    
+        return int(utc - zone)
+
         
     
 def getFolderPath(str):
