@@ -33,6 +33,7 @@ import imaplib
 
 import mimetypes
 import mimetools
+import hashlib
 
 #diretório das configurações e do log
 iexpressodir = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.iexpresso')
@@ -251,21 +252,23 @@ class ExpressoMessage:
                 self.cc = values['cc']
             else:
                 self.cc = ''
+            
+            self.hashid = self.calcHashId()
         except:
             log( values )
             raise
     
-#    def hashId(self):
-#        m = hashlib.md5()
-#        m.update(self.contentType + '@')
-#        m.update(self.date.isoformat() + '@')
-#        m.update(self.sfrom.encode('utf-8') + '@')
-#        m.update(self.to.encode('utf-8') + '@')
-#        m.update(self.subject.encode('utf-8') + '@')
-#        m.update(self.body.encode('utf-8') + '@')
-#        m.update(self.attachmentNames.encode('utf-8') + '@')
-#        m.update(str(self.size))
-#        return m.hexdigest()
+    def calcHashId(self):
+        m = hashlib.md5()
+        m.update(self.contentType + '@')
+        m.update(self.date.isoformat() + '@')
+        m.update(self.sfrom.encode('utf-8') + '@')
+        m.update(self.to.encode('utf-8') + '@')
+        m.update(self.subject.encode('utf-8') + '@')
+        m.update(self.body.encode('utf-8') + '@')
+        m.update(self.attachmentNames.encode('utf-8') + '@')
+        m.update(str(self.size))
+        return m.hexdigest()
         
     def getFlags(self):
         flags = []
@@ -593,8 +596,9 @@ def checkImapError(typ, resp):
             raise Exception(_('Bad response.'))
         
 class MsgItem():
-    def __init__(self, msgid, msgfolder, msgflags):
+    def __init__(self, msgid, hashid, msgfolder, msgflags):
         self.id = msgid
+        self.hashid = hashid
         self.folder = msgfolder
         self.flags = msgflags
 
@@ -611,13 +615,16 @@ class MsgList():
     def ekey(self, msgid, msgfolder):
         return '%d@%s' % (msgid, msgfolder)
     
-    def add(self, id, msgid, msgfolder, msgflags):
-        self.db[id] = MsgItem(msgid, msgfolder, msgflags)
+    def add(self, id, msgid, hashid, msgfolder, msgflags):
+        self.db[id] = MsgItem(msgid, hashid, msgfolder, msgflags)
         self.eindex[self.ekey(msgid, msgfolder)] = id
     
     def get(self, id):
         msg = self.db[id]
         return (msg.id, msg.folder, msg.flags)
+    
+    def getHashId(self, id):
+        return self.db[id].hashid
     
     def getIds(self):
         return self.db.keys()
@@ -635,19 +642,23 @@ class MsgList():
         self.updated = False
         self.msgupdated = False
     
-    def update(self, id, msgid, msgfolder, msgflags):
+    def update(self, id, msgid, msgfolder, msgflags, hashid = None):
         if id in self.db:
-            msgupdated = True
+            self.msgupdated = True
             msg = self.db[id]
             if msg.id != msgid or msg.folder != msgfolder:
                 del self.eindex[self.ekey(msg.id, msg.folder)]
                 msg.id = msgid
                 msg.folder = msgfolder
                 self.eindex[self.ekey(msgid, msgfolder)] = id
+            if not hashid is None:
+                msg.hashid = hashid
             msg.flags = msgflags
         else:
+            if hashid is None:
+                raise Exception('HashId is None.')
             self.updated = True
-            self.add(id, msgid, msgfolder, msgflags)
+            self.add(id, msgid, hashid, msgfolder, msgflags)
 
     def folderIsEmpty(self, folder):
         for msg in self.db.values():
@@ -665,7 +676,7 @@ class MsgList():
         return self.updated or self.msgupdated
     
     def save(self, file):
-        file.write("4\n") # versão
+        file.write("5\n") # versão
         file.write(self.signature.encode('utf-8'))
         file.write('\n')
         # write folders
@@ -683,6 +694,8 @@ class MsgList():
             file.write('\x00')
             file.write(str(msg.id))
             file.write('\x00')
+            file.write(msg.hashid)
+            file.write('\x00')
             file.write(msg.folder.encode('utf-8'))
             file.write('\x00')
             file.write(msg.flags.encode('utf-8'))
@@ -692,7 +705,7 @@ class MsgList():
     def load(self, file):
         line = file.readline().strip()
         version = int(line)
-        if version < 3 or version > 4:
+        if version < 3 or version > 5:
             log( "DB-Version:", line )
             raise IExpressoError(_('Unsupported DB version.'))
         self.signature = file.readline().strip()
@@ -707,7 +720,10 @@ class MsgList():
         line = file.readline().strip()
         while line != '':
             parts = line.split('\x00')
-            self.add(parts[0].decode('utf-8'), int(parts[1]), parts[2].decode('utf-8'), parts[3].decode('utf-8'))
+            if version >= 5:
+                self.add(parts[0].decode('utf-8'), int(parts[1]), parts[2], parts[3].decode('utf-8'), parts[4].decode('utf-8'))
+            else:
+                self.add(parts[0].decode('utf-8'), int(parts[1]), '', parts[2].decode('utf-8'), parts[3].decode('utf-8'))
             line = file.readline().strip()
 
 class MailSynchronizer():
@@ -875,7 +891,7 @@ class MailSynchronizer():
                                     dbid += decode_header(moSender.group(1)).strip()
                                 if r'\Unseen' in flags:
                                     flags -= (r'\Unseen',)
-                                localdb.add(dbid, localid, folder, '(' + ' '.join(flags) + ')')
+                                localdb.add(dbid, localid, '', folder, '(' + ' '.join(flags) + ')')
                                 msgcount += 1
                             except:
                                 log( m )
@@ -911,10 +927,10 @@ class MailSynchronizer():
         if fullmsg.has_key('Message-Id'):
             return fullmsg['Message-Id'] + sender
         else:
-            hashid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
-            fullmsg.add_header('Message-Id', hashid)
-            hashid += sender
-            return hashid
+            newid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
+            fullmsg.add_header('Message-Id', newid)
+            newid += sender
+            return newid
     
     def strmsg(self, msg):
         fp = StringIO()
@@ -927,53 +943,48 @@ class MailSynchronizer():
         for folder_id in folders:
             log( 'Checking', folder_id )
             msgs = self.es.getMsgs(criteria, folder_id)
-            todownload = {}
-            todownloadEx = {}
+            todownload = []
             for msg in msgs:
                 dbid = self.db.getId(msg.id, folder_id)
                 if dbid != None:
-                    self.db.update(dbid, msg.id, folder_id, msg.getFlags()) #atualiza os dados da msg
+                    if self.db.getHashId(dbid) != msg.hashid:
+                        #atualiza toda a pasta
+                        log( "Re-downloading entire folder." )
+                        todownload = list(msgs)
+                        break
+                    self.db.update(dbid, msg.id, folder_id, msg.getFlags(), msg.hashid) #atualiza os dados da msg
                     curids.add(dbid)
                 else:
-                    #mensagens com "'" no subject devem ser importadas individualmente
-                    if msg.subject.find("'") >= 0:
-                        todownloadEx[msg.id] = msg.getFlags()
-                    else:
-                        todownload[msg.id] = msg.getFlags()
+                    todownload.append(msg)
                     
-            if len(todownload) + len(todownloadEx) > 0:
-                if len(todownload) > 0:
-                    newmsgs = self.es.getFullMsgs(folder_id, ','.join([str(key) for key in todownload.keys()]))
-                    if newmsgs == None:
-                        #download falhou, faz o download de todas as mensagens pelo modo especial
-                        todownloadEx.update(todownload)
-                        newmsgs = {}
-                    # se nem todas as mensagens foram retornadas agenda o download especial
-                    elif len(newmsgs) != len(todownload):
-                        for eid, eflags in todownload.items():
-                            if not eid in newmsgs:
-                                todownloadEx[eid] = eflags
-                else:
+            if len(todownload) > 0:
+                newmsgs = self.es.getFullMsgs(folder_id, ','.join([str(msg.id) for msg in todownload]))
+                if newmsgs == None:
+                    #download falhou, faz o download de todas as mensagens pelo modo especial
                     newmsgs = {}
-                #faz o download das mensagens especiais individualmente
-                for eid, eflags in todownloadEx.items():
-                    log( 'Getting message using alternative way:', eid )
-                    msgsrc = self.es.getFullMsgEspecial(folder_id, eid)
-                    if msgsrc:
-                        newmsgs[eid] = msgsrc
-                        todownload[eid] = eflags
+                if len(newmsgs) != len(todownload):
+                    # mensagens com caracteres especiais devem ser importadas individualmente
+                    # se nem todas as mensagens foram retornadas agenda o download especial
+                    for msg in todownload:
+                        if not msg.id in newmsgs:
+                            log( 'Getting message using alternative way:', msg.id )
+                            msgsrc = self.es.getFullMsgEspecial(folder_id, msg.id)
+                            if msgsrc:
+                                newmsgs[msg.id] = msgsrc
+                
                 #importa as mensagens no banco
-                for eid, eflags in todownload.items():
-                    if eid in newmsgs:
-                        fullmsg = email.message_from_string( newmsgs[eid] )
+                for msg in todownload:
+                    if msg.id in newmsgs:
+                        eflags = msg.getFlags()
+                        fullmsg = email.message_from_string( newmsgs[msg.id] )
                         dbid = self.getDbId(fullmsg)
-                        log( '  ', eid, eflags, dbid ) #fullmsg['Subject'] )
+                        log( '  ', msg.id, eflags, dbid ) #fullmsg['Subject'] )
                         if not localdb.exists(dbid):
                             self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
                             self.createLocalFolder(folder_id)
                             typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, self.strmsg(fullmsg))
                             checkImapError(typ, resp)
-                        self.db.update(dbid, eid, folder_id, eflags)
+                        self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                         curids.add(dbid)
         return curids
     
@@ -999,10 +1010,11 @@ class MailSynchronizer():
                 if not importedIds.isEmpty():
                     self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
                 
-                localdb = self.loadLocalMsgs() # carrega as novas mensagens que foram inseridas
-                
-                #remove as mensagens que não estão mais na caixa do expresso da caixa local
-                self.changeLocal(curids, localdb)
+                if self.db.wasModified():
+                    if self.db.updated:
+                        self.getLocalFolders() # atualiza a lista de pastas
+                    #remove as mensagens que não estão mais na caixa do expresso da caixa local
+                    self.changeLocal(curids, localdb)
 
                 self.checkDeletedFolders()
             finally:
@@ -1051,15 +1063,13 @@ class MailSynchronizer():
                 
             localdb = self.initUpdate()
             try:
-                self.changeExpresso(localdb, doDelete=True) #seta os flags das mensagens no expresso
+                self.changeExpresso(localdb, doDelete=True) #seta os flags e exclui mensagens no expresso
                 
                 self.loadExpressoMessages('UNSEEN', localdb, self.smartFolders)
 
                 if self.db.updated:
                     self.es.updateQuota()
                 
-                #if not importedIds.isEmpty():
-                #    self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
             finally:
                 if self.db.wasModified():
                     self.saveDb()
@@ -1096,7 +1106,7 @@ class MailSynchronizer():
                 self.db.delete(id)
             else:
                 if not localdb.exists(id):
-                    continue
+                    continue #deve ser uma mensagem recem inserida
                 msgid, msgfolder, msgflags = localdb.get(id)
                 efolder, eflags = self.db.get(id)[1:3]
                 if msgflags != eflags:
@@ -1176,12 +1186,9 @@ class MailSynchronizer():
                 msgid = moId.group(1).strip()
                 log('Searching Message-ID:', msgid) 
             msgs = self.es.getMsgs('RECENT TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços
-            if len(msgs) == 1:
-                msg = msgs[0]
-                self.db.update(dbid, msg.id, folder, msg.getFlags())
-            elif len(msgs) > 1:
-                #adiciona com id falso para evitar que o email seja reenviado em caso de erro após esta parte
-                self.db.update(dbid, -localid, folder, localflags)
+            if len(msgs) >= 1:
+                msg = msgs[-1] # pega a última
+                self.db.update(dbid, msg.id, folder, msg.getFlags(), msg.hashid)
         self.closeLocalFolder()
         
     def askDeleteMessages(self, todelete):
@@ -1221,6 +1228,8 @@ class MailSynchronizer():
                         dbid = self.db.getId(eid, folder)
                         if dbid != None and dbid in newflags:
                             self.db.update(dbid, eid, folder, newflags[dbid]) # atualiza o banco
+                        else:
+                            log("Message not found:", eid, folder, dbid, newflags)
     
     def createFolderExpresso(self, newfolder):
         if not newfolder in self.db.folders:
@@ -1285,7 +1294,7 @@ class MailSynchronizer():
                 if msgflags.find(r'\Deleted') < 0 and not msgfolder.endswith('/Trash'):
                     #por enquanto só importa itens que tenham um Message-ID
                     self.importMsgExpresso(msgfolder, msgid, msgflags, id)
-                    importedIds.add(id, msgid, msgfolder, msgflags)
+                    importedIds.add(id, msgid, '', msgfolder, msgflags)
 
         self.flagMessagesExpresso(toflag, newflags)
         
