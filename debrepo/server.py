@@ -13,9 +13,42 @@ mime_map = {
             '.gz':'application/x-gzip'
             }
 
+def getLangPref(request):
+  langs = []
+  if not 'Accept-Language' in request.headers:
+    return langs
+  header = request.headers['Accept-Language']
+  if len(header) == 0:
+    return langs
+  
+  map = {}
+  for langinfo in header.split(','):
+    parts = langinfo.split(';')
+    lang = parts[0].strip()
+    langs.append(lang)
+    if len(parts) == 1:
+      map[lang] = 1
+    else:
+      map[lang] = float(parts[1].strip().strip('q='))
+  langs.sort(lambda a, b: int((map[b] - map[a]) * 1000))
+  return langs
+
 class MainHandler(webapp.RequestHandler):
   def get(self):
-    self.response.out.write(template.render("main.html", {}))
+    langs = getLangPref(self.request)
+    lang = 'en'
+    for l in langs:
+      if l.startswith('pt'):
+        lang = 'pt'
+        break
+      if l.startswith('en'):
+        lang = 'en'
+        break
+    if lang == 'pt':
+      text = template.render("body_pt.html", {})
+    else:
+      text = template.render("body_en.html", {})
+    self.response.out.write(template.render("main.html", {'text': text}))
 
 class DebHandler(webapp.RequestHandler):
   def get(self, filename):
