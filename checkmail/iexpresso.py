@@ -1033,6 +1033,9 @@ class MailSynchronizer():
                 importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
                 
                 curids = self.loadExpressoMessages('ALL', localdb, self.db.folders)
+                # o usuário pode ter alterado a estrutura local enquanto as mensagens do expresso eram carregadas
+                # por isso deve-se recarregar o banco local
+                localdb = self.loadLocalMsgs()
                 
                 if not importedIds.isEmpty():
                     self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
