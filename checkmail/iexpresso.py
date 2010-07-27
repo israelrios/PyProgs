@@ -1037,11 +1037,8 @@ class MailSynchronizer():
                 if not importedIds.isEmpty():
                     self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
                 
-                if self.db.wasModified():
-                    if self.db.updated:
-                        self.getLocalFolders() # atualiza a lista de pastas
-                    #remove as mensagens que não estão mais na caixa do expresso da caixa local
-                    self.changeLocal(curids, localdb)
+                #remove as mensagens que não estão mais na caixa do expresso da caixa local
+                self.changeLocal(curids, localdb)
 
                 self.checkDeletedFolders()
             finally:
