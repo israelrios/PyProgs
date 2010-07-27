@@ -44,10 +44,7 @@ class MainHandler(webapp.RequestHandler):
       if l.startswith('en'):
         lang = 'en'
         break
-    if lang == 'pt':
-      text = template.render("body_pt.html", {})
-    else:
-      text = template.render("body_en.html", {})
+    text = template.render("body_%s.html" % lang, {})
     self.response.out.write(template.render("main.html", {'text': text}))
 
 class DebHandler(webapp.RequestHandler):
