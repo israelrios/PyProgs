@@ -4,5 +4,5 @@ Codename: stable
 Architectures: all i386
 Components: main
 Description: Israel Rios APT Repository
-DebIndices: Packages Release . .gz
-UDebIndices: Packages . .gz
+DebIndices: Packages Release . .bz2
+UDebIndices: Packages . .bz2
