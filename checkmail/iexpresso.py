@@ -1177,27 +1177,32 @@ class MailSynchronizer():
             
     def checkDeletedFolders(self):
         """Remove pastas do expresso que foram excluídas localmente."""
-        removedFolders = set()
-        try:
-            for efolder in self.db.folders:
-                if not efolder in self.localFolders:
-                    if not efolder in self.defaultFolders:
-                        isEmpty = self.db.folderIsEmpty(efolder)
+        orderedFolders = list(self.db.folders)
+        # ordena para verificar primeiro as subpastas
+        orderedFolders.sort(reverse=True)
+        for efolder in orderedFolders:
+            if not efolder in self.localFolders:
+                if not efolder in self.defaultFolders:
+                    isEmpty = self.db.folderIsEmpty(efolder)
+                    if isEmpty:
+                        # verifica se as pastas filhas desta foram removidas
+                        prefix = efolder + '/'
+                        for f in self.db.folders:
+                            if f.startswith(prefix):
+                                isEmpty = False
+                                break
                         if isEmpty:
                             # re-verifica se não há mensagens no servidor dentro dessa pasta
                             msgs = self.es.getMsgs('ALL', efolder)
                             isEmpty = len(msgs) == 0
-                        if isEmpty:
-                            log( "Removing folder from expresso:", efolder )
-                            self.es.deleteFolder(efolder)
-                            removedFolders.add(efolder)
-                        else:
-                            log( "Expresso folder '%s' has messages. Not removing." )
+                    if isEmpty:
+                        log( "Removing folder from expresso:", efolder )
+                        self.es.deleteFolder(efolder)
+                        self.db.folders.remove(efolder)
                     else:
-                        self.createLocalFolder(efolder)
-        finally:
-            # update db.folders
-            self.db.folders -= removedFolders
+                        log( "Expresso folder '%s' has messages. Not removing." )
+                else:
+                    self.createLocalFolder(efolder)
     
     def importMsgExpresso(self, folder, localid, localflags, dbid):
         log( 'Importing id: %d to folder: %s  dbid: %s' % (localid, folder, dbid) )
