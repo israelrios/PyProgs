@@ -835,18 +835,32 @@ class MailSynchronizer():
         self.getLocalFolders()
         # verifica se todas as pastas do expresso existem no imap local
         folders = self.es.listFolders()
-        for folder_id in folders:
+        ordFolders = list(folders)
+        ordFolders.sort() # ordena para que as pastas sejam criadas na ordem correta
+        for folder_id in ordFolders:
             # não recria uma pasta excluída pelo usuário
             if not folder_id in self.db.folders:
                 self.createLocalFolder(folder_id)
         self.db.folders = folders
     
-    def createLocalFolder(self, folder):
-        if not folder in self.localFolders:
-            log( 'Creating folder', folder )
-            (typ, data) = self.client.create( folder.encode('imap4-utf-7') )
-            checkImapError(typ, data)
-            self.localFolders.add(folder)
+    def iterParents(self, folder):
+        '''Retorna todos os pais de uma pasta.'''
+        parents = folder.split('/')
+        if len(parents) == 1:
+            yield folder # must be INBOX
+            return
+        folder = parents[0]
+        for parent in parents[1:]:
+            folder = folder + '/' + parent
+            yield folder
+
+    def createLocalFolder(self, newfolder):
+        for folder in self.iterParents(newfolder):
+            if not folder in self.localFolders:
+                log( 'Creating folder', folder )
+                (typ, data) = self.client.create( folder.encode('imap4-utf-7') )
+                checkImapError(typ, data)
+                self.localFolders.add(folder)
     
     def getLocalSignature(self):
         typ, msg = self.client.select(self.metadataFolder, True)
@@ -1279,10 +1293,11 @@ class MailSynchronizer():
                             log("Message not found:", eid, folder, dbid, newflags)
     
     def createFolderExpresso(self, newfolder):
-        if not newfolder in self.db.folders:
-            log( "Creating folder on Expresso:", newfolder )
-            self.es.createFolder(newfolder) #cria a pasta no expresso
-            self.db.folders.add(newfolder)
+        for folder in self.iterParents(newfolder):
+            if not folder in self.db.folders:
+                log( "Creating folder on Expresso:", folder )
+                self.es.createFolder(folder) #cria a pasta no expresso
+                self.db.folders.add(folder)
                             
     def moveMessagesExpresso(self, tomove):
         # move as mensagens
