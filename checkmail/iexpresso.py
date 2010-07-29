@@ -428,7 +428,13 @@ class ExpressoManager:
             msgs = {}
             for name in zfile.namelist():
                 #formato do nome SUBJECT_ID.eml, extraí o ID do nome do arquivo
-                msgs[int(name[name.rindex('_') +1 : -4])] = str(zfile.read(name)) # a codificação das mensagens é ASCII
+                source = str(zfile.read(name)) # a codificação das mensagens é ASCII
+                if not "From:" in source:
+                    continue # mensagem inválida
+                idstart = name.rindex('_') + 1
+                if idstart <= 0:
+                    continue # id não identificado
+                msgs[int(name[idstart : -4])] = source
             zfile.close()
         except zipfile.BadZipfile, e:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
@@ -447,6 +453,8 @@ class ExpressoManager:
         url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
         source = str(url.read())
         url.close()
+        if not "From:" in source:
+            return None #mensagem inválida
         return source
     
     def importMsgs(self, msgfolder, file):
@@ -648,7 +656,7 @@ class MsgList():
         return self.db[id].hashid
     
     def getIds(self):
-        return self.db.keys()
+        return set(self.db.keys())
     
     def getId(self, msgid, msgfolder):
         return self.eindex.get(self.ekey(msgid, msgfolder))
@@ -996,7 +1004,7 @@ class MailSynchronizer():
                         if not msg.id in newmsgs:
                             log( 'Getting message using alternative way:', msg.id )
                             msgsrc = self.es.getFullMsgEspecial(folder_id, msg.id)
-                            if msgsrc:
+                            if not msgsrc is None:
                                 newmsgs[msg.id] = msgsrc
                 
                 #importa as mensagens no banco
@@ -1133,7 +1141,7 @@ class MailSynchronizer():
                 self.db.delete(id)
             else:
                 if not localdb.exists(id):
-                    continue #deve ser uma mensagem recem inserida
+                    continue #deve ser uma mensagem recem inserida ou excluída localmente
                 msgid, msgfolder, msgflags = localdb.get(id)
                 efolder, eflags = self.db.get(id)[1:3]
                 if msgflags != eflags:
@@ -1300,7 +1308,8 @@ class MailSynchronizer():
             for id in self.db.getIds():
                 if not localdb.exists(id):
                     eid, efolder = self.db.get(id)[0:2]
-                    #por motivos de segurança só deveria excluir da lixeira, após algum tempo de teste essa restrição foi removida
+                    #por motivos de segurança só deveria excluir da lixeira,
+                    # após algum tempo de teste essa restrição foi removida
                     if efolder in todelete:
                         todelete[efolder].append(eid)
                     else:
