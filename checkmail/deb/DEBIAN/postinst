@@ -19,6 +19,14 @@ curdate=`date +%y%m%d.%H%M%S`
 srcconf=/usr/share/iexpresso/dovecot.conf
 conf="${confdir}/dovecot.conf"
 
+#Check if dovecot is installed and what version of it is installed
+if which dovecot >/dev/null 2>&1; then
+	dcver=`dovecot --version`
+	if dpkg --compare-versions "$dcver" '>' '1.2'; then
+		srcconf=/usr/share/iexpresso/dovecot-1.2+.conf
+	fi
+fi
+
 if [ -e "$conf" ]; then
 	# when files are equal, exit
 	if diff -q $srcconf $conf >/dev/null 2>&1; then
