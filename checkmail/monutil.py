@@ -26,7 +26,7 @@ class HtmlTextParser(HTMLParser):
         pass
 
 
-patHeader = re.compile('\r\n[t ]')
+patHeader = re.compile('\r\n[\t ]')
 def decode_header(header):
     text = []
     lastAscii = None
