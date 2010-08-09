@@ -94,7 +94,7 @@ class CheckMailService(Service):
         #subprocess.Popen('thunderbird', close_fds=True)
         execute('thunderbird')
         #remove o status "new mail"
-        self.setStatus([], False)
+        #self.setStatus([], False)
         #agenda a execução do próximo refresh para 30seg
         #t = threading.Timer(30, lambda: self.refresh())
         #t.setDaemon(True)
