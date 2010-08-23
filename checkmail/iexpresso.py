@@ -986,9 +986,9 @@ class MailSynchronizer():
         g = EmailGenerator(fp, mangle_from_=False) #mangle_from = False para não por o ">" no início.
         g.flatten(msg)
         return fp.getvalue()
-        
+
     def loadExpressoMessages(self, criteria, localdb, folders):
-        curids = set()
+        edb = MsgList()
         for folder_id in folders:
             log( 'Checking', folder_id )
             msgs = self.es.getMsgs(criteria, folder_id)
@@ -1001,8 +1001,7 @@ class MailSynchronizer():
                         log( "Re-downloading entire folder." )
                         todownload = list(msgs)
                         break
-                    self.db.update(dbid, msg.id, folder_id, msg.getFlags(), msg.hashid) #atualiza os dados da msg
-                    curids.add(dbid)
+                    edb.update(dbid, msg.id, folder_id, msg.getFlags(), msg.hashid) #atualiza os dados da msg
                 else:
                     todownload.append(msg)
                     
@@ -1028,14 +1027,18 @@ class MailSynchronizer():
                         fullmsg = email.message_from_string( newmsgs[msg.id] )
                         dbid = self.getDbId(fullmsg)
                         log( '  ', msg.id, eflags, dbid ) #fullmsg['Subject'] )
-                        if not localdb.exists(dbid):
-                            self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
-                            self.createLocalFolder(folder_id)
-                            typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, self.strmsg(fullmsg))
-                            checkImapError(typ, resp)
-                        self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
-                        curids.add(dbid)
-        return curids
+                        if not self.db.exists(dbid):
+                            if not localdb.exists(dbid):
+                                self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
+                                self.createLocalFolder(folder_id)
+                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, self.strmsg(fullmsg))
+                                checkImapError(typ, resp)
+                            self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+                        edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+                #re-verifica se todas as mensagens foram baixadas
+                if len(newmsgs) != len(todownload):
+                    raise Exception(_('Error loading messages from Expresso.'))
+        return edb
     
     def checkSignature(self, localdb):
         sig = self.getLocalSignature()
@@ -1054,7 +1057,7 @@ class MailSynchronizer():
             try:
                 importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
                 
-                curids = self.loadExpressoMessages('ALL', localdb, self.db.folders)
+                edb = self.loadExpressoMessages('ALL', localdb, self.db.folders)
                 # o usuário pode ter alterado a estrutura local enquanto as mensagens do expresso eram carregadas
                 # por isso deve-se recarregar o banco local
                 localdb = self.loadLocalMsgs()
@@ -1063,7 +1066,7 @@ class MailSynchronizer():
                     self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
                 
                 #remove as mensagens que não estão mais na caixa do expresso da caixa local
-                self.changeLocal(curids, localdb)
+                self.changeLocal(edb, localdb)
 
                 self.checkDeletedFolders()
             finally:
@@ -1133,8 +1136,8 @@ class MailSynchronizer():
     def closeLocalFolder(self):
         if self.client.state == 'SELECTED':
             self.client.close()
-        
-    def changeLocal(self, curids, localdb):
+
+    def changeLocal(self, edb, localdb):
         #seleciona as mensagens a serem excluídas
         folders_expunge = {}
         def deleteAfter(msgfolder, msgid):
@@ -1142,6 +1145,8 @@ class MailSynchronizer():
                 folders_expunge[msgfolder].append(msgid)
             else:
                 folders_expunge[msgfolder] = [msgid]
+
+        curids = edb.getIds()
                 
         for id in self.db.getIds():
             if not id in curids:
@@ -1155,14 +1160,15 @@ class MailSynchronizer():
                 self.db.delete(id)
             else:
                 if not localdb.exists(id):
-                    continue #deve ser uma mensagem recem inserida ou excluída localmente
+                    continue #deve ser uma mensagem excluída localmente
                 msgid, msgfolder, msgflags = localdb.get(id)
+                curid, curfolder, curflags = edb.get(id)
                 efolder, eflags = self.db.get(id)[1:3]
-                if msgflags != eflags:
-                    diff = self.flagsdiff(eflags, msgflags)
+                if curflags != eflags and curflags != msgflags:
+                    diff = self.flagsdiff(curflags, eflags)
                     if len(diff) > 0:
                         self.client.select(msgfolder.encode('imap4-utf-7'), False)
-                        # TODO: forwarded não pode ser representando no bincimap (sem as alterações realizadas por mim)
+                        # NOTE: forwarded não pode ser representando no bincimap (sem as alterações realizadas por mim)
                         log( 'Update local flag. Id: %d   folder: %s   flags: %s  localflags: %s' % (msgid, msgfolder, str(' '.join(diff)), msgflags) )
                         if r'\Unseen' in diff:
                             del diff[diff.index(r'\Unseen')]
@@ -1173,13 +1179,15 @@ class MailSynchronizer():
                         if len(diff) > 0:
                             self.client.store(str(msgid), '+FLAGS', ' '.join(diff))
                         self.closeLocalFolder()
-                if efolder != msgfolder:
+                if curfolder != efolder and curfolder != msgfolder:
                     #move a mensagens localmente
-                    log( 'Moving local message id: %d  folder: %s  new_folder: %s' % (msgid, msgfolder.encode('utf-8'), efolder.encode('utf-8')) )
-                    self.createLocalFolder(efolder)
+                    log( 'Moving local message id: %d  folder: %s  new_folder: %s' % (msgid, msgfolder.encode('utf-8'), curfolder.encode('utf-8')) )
+                    self.createLocalFolder(curfolder)
                     deleteAfter(msgfolder, msgid)
                     self.client.select(msgfolder.encode('imap4-utf-7'), True)
-                    self.client.copy(str(msgid), efolder.encode('imap4-utf-7'))
+                    self.client.copy(str(msgid), curfolder.encode('imap4-utf-7'))
+                #atualiza o banco
+                self.db.update(id, curid, curfolder, curflags)
         
         #exclui as mensagens e faz expunge da pasta
         for folder in folders_expunge.keys():
