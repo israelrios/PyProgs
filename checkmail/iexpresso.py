@@ -1159,10 +1159,13 @@ class MailSynchronizer():
                     
                 self.db.delete(id)
             else:
-                if not localdb.exists(id):
-                    continue #deve ser uma mensagem excluída localmente
-                msgid, msgfolder, msgflags = localdb.get(id)
                 curid, curfolder, curflags = edb.get(id)
+                if not localdb.exists(id):
+                    #atualiza o banco
+                    self.db.update(id, curid, curfolder, curflags)
+                    continue #deve ser uma mensagem excluída localmente
+
+                msgid, msgfolder, msgflags = localdb.get(id)
                 efolder, eflags = self.db.get(id)[1:3]
                 if curflags != eflags and curflags != msgflags:
                     diff = self.flagsdiff(curflags, eflags)
