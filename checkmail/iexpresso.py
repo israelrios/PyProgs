@@ -1160,9 +1160,10 @@ class MailSynchronizer():
                 self.db.delete(id)
             else:
                 curid, curfolder, curflags = edb.get(id)
+                hashid = edb.getHashId(id)
                 if not localdb.exists(id):
                     #atualiza o banco
-                    self.db.update(id, curid, curfolder, curflags)
+                    self.db.update(id, curid, curfolder, curflags, hashid)
                     continue #deve ser uma mensagem excluída localmente
 
                 msgid, msgfolder, msgflags = localdb.get(id)
@@ -1190,7 +1191,7 @@ class MailSynchronizer():
                     self.client.select(msgfolder.encode('imap4-utf-7'), True)
                     self.client.copy(str(msgid), curfolder.encode('imap4-utf-7'))
                 #atualiza o banco
-                self.db.update(id, curid, curfolder, curflags)
+                self.db.update(id, curid, curfolder, curflags, hashid)
         
         #exclui as mensagens e faz expunge da pasta
         for folder in folders_expunge.keys():
