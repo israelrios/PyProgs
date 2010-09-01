@@ -15,6 +15,8 @@ import dbus
 
 SEC_HOUR = 60*60 # 1 hora em segundos
 
+SEC_MAX_PERIOD = SEC_HOUR * 5 - (60 * 2) # 4hs e 58mins
+
 class SisCopTrayIcon(TrayIcon):
     def onActivate(self, event):
         self.service.showPage()
@@ -36,6 +38,8 @@ class SisCopTrayIcon(TrayIcon):
 class SisCopService(Service):
     urlSisCop = 'http://siscop.portalcorporativo.serpro/cpf_senha.asp'
     timer = None
+    alertExit1Period = True
+    timerExit1Period = None
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
         # Os campos do formulário
@@ -51,10 +55,16 @@ class SisCopService(Service):
     def createTrayIcon(self):
         return SisCopTrayIcon(self)
 
+    def releaseTimerExit1Period(self):
+        if self.timerExit1Period != None:
+            self.timerExit1Period.cancel()
+            self.timerExit1Period = None
+
     def onQuit(self):
         Service.onQuit(self)
         if self.timer != None:
             self.timer.cancel()
+        self.releaseTimerExit1Period()
 
     def runService(self, timered=True):
         #o valor de refreshMinutos pode ser alterado em self.check()
@@ -116,6 +126,7 @@ class SisCopService(Service):
         text = parser.texto
         dtSaida = self.extractDate(text, 1, entrance=False)
         if dtSaida != None:
+            self.releaseTimerExit1Period()
             print u"Exit date first period: ", dtSaida
             if self.hasEntrada(text):
                 self.terminated = True #Está tudo OK
@@ -136,6 +147,23 @@ class SisCopService(Service):
                     self.refreshMinutes = 5 # em 5 minutos verifica novamente
                     self.onTimer()
                 return False
+        elif self.alertExit1Period:
+            dtEntrada = self.extractDate(text, 1, entrance=True)
+            if dtEntrada != None:
+                #Verifica se a diferença é menor que 5 horas
+                diff = datetime.datetime.today() - dtEntrada
+                if diff.seconds < SEC_MAX_PERIOD: #menor que 5 horas
+                    if self.timerExit1Period == None:
+                        secDiff = SEC_MAX_PERIOD - diff.seconds + 5 # mais 5 segundos pra garantir que vai entrar no else
+                        timer = Timer(secDiff, self.check)
+                        timer.setDaemon(True)
+                        timer.start()
+                        self.timerExit1Period = timer
+                        print "timer started (to exit)"
+                else:
+                    self.alertExit1Period = False
+                    self.releaseTimerExit1Period()
+                    self.showPage()
         return True
                 
 
