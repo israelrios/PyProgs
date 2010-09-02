@@ -12,6 +12,7 @@ import cookielib
 import datetime
 from threading import Timer
 import dbus
+import commands
 
 SEC_HOUR = 60*60 # 1 hora em segundos
 
@@ -73,8 +74,13 @@ class SisCopService(Service):
 
     def showPage(self):
         #abre o browser com a página
-        execute(["firefox", self.urlSisCop])
-        execute(["wmctrl", "-a", "Firefox"])
+        procs = commands.getoutput('/bin/ps xo comm').split('\n')
+        if 'chrome' in procs:
+            execute(["chrome", self.urlSisCop])
+            execute(["wmctrl", "-a", "Chrome"])
+        else:
+            execute(["firefox", self.urlSisCop])
+            execute(["wmctrl", "-a", "Firefox"])
 
     def onTimer(self):
         mustShowPage = self.timer != None
@@ -135,14 +141,14 @@ class SisCopService(Service):
                 diff = datetime.datetime.today() - dtSaida
                 self.horaRetorno = dtSaida + datetime.timedelta(seconds=SEC_HOUR)
                 if diff.seconds < SEC_HOUR: #menor que uma hora
+                    secDiff = SEC_HOUR - diff.seconds
                     if self.timer == None:
-                        secDiff = SEC_HOUR - diff.seconds
                         self.timer = Timer(secDiff, self.onTimer)
                         self.timer.setDaemon(True)
                         self.timer.start()
                         print "timer started"
-                        #executa novamente em 1 minuto após a hora prevista para registro
-                        self.refreshMinutes = 1.0 + float(secDiff)/60.0
+                    #executa novamente em 1 minuto após a hora prevista para registro
+                    self.refreshMinutes = 1.0 + float(secDiff)/60.0
                 else:
                     self.refreshMinutes = 5 # em 5 minutos verifica novamente
                     self.onTimer()
