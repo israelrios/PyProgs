@@ -76,7 +76,7 @@ class SisCopService(Service):
         #abre o browser com a página
         procs = commands.getoutput('/bin/ps xo comm').split('\n')
         if 'chrome' in procs:
-            execute(["chrome", self.urlSisCop])
+            execute(["google-chrome", self.urlSisCop])
             execute(["wmctrl", "-a", "Chrome"])
         else:
             execute(["firefox", self.urlSisCop])
