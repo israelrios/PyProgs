@@ -256,7 +256,10 @@ class ExpressoMessage:
 class ExpressoManager:
     urlExpresso = 'https://expresso.serpro.gov.br/'
     urlLogin = urlExpresso + 'login.php'
-    urlImapFunc = urlExpresso + 'expressoMail1_2/controller.php?action=$this.imap_functions.'
+    urlIndex = urlExpresso + 'expressoMail1_2/index.php'
+    urlController = urlExpresso + 'expressoMail1_2/controller.php'
+    urlAction = urlController + '?action=$this.'
+    urlImapFunc = urlAction + 'imap_functions.'
     urlCheck = urlImapFunc + 'get_range_msgs2&msg_range_begin=1&msg_range_end=5000&sort_box_type=SORTARRIVAL&sort_box_reverse=1&'
     urlListFolders = urlImapFunc + 'get_folders_list'
     urlMoveMsgs = urlImapFunc + 'move_messages&border_ID=null&sort_box_type=SORTARRIVAL&search_box_type=ALL&sort_box_reverse=1&reuse_border=null&get_previous_msg=0&'
@@ -266,13 +269,13 @@ class ExpressoManager:
     urlDeleteFolder = urlImapFunc + 'delete_mailbox&'
     urlGetQuota = urlImapFunc + 'get_quota&folder_id=INBOX'
     urlDownloadMessages = urlExpresso + 'expressoMail1_2/inc/gotodownload.php?msg_folder=null&msg_number=null&msg_part=null&newfilename=mensagens.zip&'
-    urlMakeEml = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.makeAll'
-    urlExportMsg = urlExpresso + 'expressoMail1_2/controller.php?action=$this.exporteml.export_msg'
-    urlController = urlExpresso + 'expressoMail1_2/controller.php'
-    urlGetReturnExecuteForm = urlExpresso + 'expressoMail1_2/controller.php?action=$this.functions.getReturnExecuteForm'
+    urlMakeEml = urlAction + 'exporteml.makeAll'
+    urlExportMsg = urlAction + 'exporteml.export_msg'
+    urlGetReturnExecuteForm = urlAction + 'functions.getReturnExecuteForm'
     urlDeleteMsgs = urlImapFunc + 'delete_msgs&border_ID=null&'
-    urlInitRules = urlExpresso + 'expressoMail1_2/controller.php?action=$this.ScriptS.init_a'
+    urlInitRules = urlAction + 'ScriptS.init_a'
     urlAutoClean = urlImapFunc + 'automatic_trash_cleanness&cyrus_delimiter=/&'
+    urlGetPrefs = urlAction + 'functions.get_preferences'
 
     def __init__(self, user, passwd):
         # Os campos do formulário
@@ -319,10 +322,16 @@ class ExpressoManager:
             url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
             self.logged = not url.geturl().startswith(self.urlLogin)
             url.close()
+            if self.logged:
+                # chama o index para inicializar os atributos na sessão do servidor
+                url = self.opener.open(self.urlIndex)
+                url.close()
+                if url.geturl().startswith(self.urlLogin):
+                    raise LoginError(_(u"It was not possible to connect at Expresso."))
         except Exception, e:
-            raise LoginError(_(u"It was not possible to connect at Expresso. Error:") + "\n\n" + str(e))
+            raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + str(e))
         if not self.logged:
-            raise LoginError(_(u"It was not possible to connect at Expresso. Check your password."))
+            raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Check your password."))
     
     def listFolders(self):
         data = self.callExpresso(self.urlListFolders)
@@ -465,10 +474,19 @@ class ExpressoManager:
                    and len(folder) > 0 and not folder in folders and folder.startswith('INBOX'):
                     folders.append(folder)
         return folders
+
+    def getPrefs(self):
+        return self.callExpresso(self.urlGetPrefs)
     
-    def autoClean(self, past_days_count):
+    def autoClean(self):
+        prefs = self.getPrefs()
+        # verifica qual a configuração do usuário
+        past_days_count = int(prefs.get('delete_trash_messages_after_n_days', '0'))
+        if past_days_count == 0:
+            log( "Skipping trash auto clean" )
+            return
         data = self.callExpresso(self.urlAutoClean, {'before_date': past_days_count})
-        log( "AutoClean response:", data )
+        log( "AutoClean(%d) response:" % past_days_count, data )
 
 # Portei este código do arquivo connector.js do expresso.
 def matchBracket(str, iniPos):
@@ -1037,7 +1055,7 @@ class MailSynchronizer():
         if day != self.curday: # verifica se o dia mudou desde a última iteração
             self.curday = day
             self.syncFolders()
-            self.es.autoClean(7) # remove da lixeira mensagens mais antigas que 7 dias
+            self.es.autoClean() # remove da lixeira as mensagens mais antigas.
             
         return localdb
         

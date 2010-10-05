@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-07-21 11:13-0300\n"
+"POT-Creation-Date: 2010-10-05 11:56-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -30,6 +30,9 @@ msgid "Bad response."
 msgstr ""
 
 msgid "Canno't create tray icon: "
+msgstr ""
+
+msgid "Check your password."
 msgstr ""
 
 msgid "DB and INBOX signatures does not match."
@@ -60,16 +63,16 @@ msgstr ""
 msgid "Error loading messages from Expresso."
 msgstr ""
 
+msgid "Error:"
+msgstr ""
+
 msgid "Invalid response format from Expresso."
 msgstr ""
 
 msgid "It was not possible to check your mail box. Error:"
 msgstr ""
 
-msgid "It was not possible to connect at Expresso. Check your password."
-msgstr ""
-
-msgid "It was not possible to connect at Expresso. Error:"
+msgid "It was not possible to connect at Expresso."
 msgstr ""
 
 msgid "Loading - "

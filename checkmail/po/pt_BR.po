@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pt_BR\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-07-21 11:13-0300\n"
+"POT-Creation-Date: 2010-10-05 11:56-0300\n"
 "PO-Revision-Date: 2010-07-19 09:02-0300\n"
 "Last-Translator: Israel Rios\n"
 "Language-Team: \n"
@@ -31,6 +31,9 @@ msgstr "Resposta Inválida."
 
 msgid "Canno't create tray icon: "
 msgstr "Não foi possível criar o ícone de status: "
+
+msgid "Check your password."
+msgstr "Verifique a sua senha."
 
 msgid "DB and INBOX signatures does not match."
 msgstr "Assinaturas de DB e INBOX não combinam."
@@ -60,17 +63,17 @@ msgstr "Erro ao carregar mensagens locais."
 msgid "Error loading messages from Expresso."
 msgstr "Erro ao carregar as mensagens do Expresso."
 
+msgid "Error:"
+msgstr "Erro:"
+
 msgid "Invalid response format from Expresso."
 msgstr "O formato da resposta do Expresso é inválido."
 
 msgid "It was not possible to check your mail box. Error:"
 msgstr "Não foi possível verificar o seu email. Erro:"
 
-msgid "It was not possible to connect at Expresso. Check your password."
-msgstr "Não foi possível conectar no Expresso. Verifique a sua senha."
-
-msgid "It was not possible to connect at Expresso. Error:"
-msgstr "Não foi possível conectar no Expresso. Erro:"
+msgid "It was not possible to connect at Expresso."
+msgstr "Não foi possível conectar no Expresso."
 
 msgid "Loading - "
 msgstr "Carregando - "
