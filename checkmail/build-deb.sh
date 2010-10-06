@@ -14,8 +14,8 @@ dir="$basedir/iexpresso"
 mkdir -p $dir
 cp -a {monitors,expresso,checkmail,iexpresso,imap4utf7,monutil}.py $dir
 cp -a {mail-read.png,mail-unread.{png,svg}} $dir
-cp iexpresso-auto.desktop $dir
-cp dovecot*.conf $dir
+cp -a iexpresso-auto.desktop $dir
+cp -a dovecot*.conf $dir
 
 #refresh po's
 #cd po
