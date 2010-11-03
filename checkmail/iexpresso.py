@@ -737,7 +737,7 @@ class MailSynchronizer():
             self.client = imaplib.IMAP4('localhost')
             self.client.login(self.user, self.password)
         except Exception, e:
-            raise LoginError(str(e))
+            raise LoginError(_("Error connecting to local IMAP server: \n%s") % str(e))
     
     def login(self, user, password):
         self.user = user

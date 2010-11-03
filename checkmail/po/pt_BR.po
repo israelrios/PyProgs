@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pt_BR\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-10-05 11:56-0300\n"
+"POT-Creation-Date: 2010-11-03 14:46-0200\n"
 "PO-Revision-Date: 2010-07-19 09:02-0300\n"
 "Last-Translator: Israel Rios\n"
 "Language-Team: \n"
@@ -50,6 +50,12 @@ msgstr "Excluir Mensagens?"
 
 msgid "Error"
 msgstr "Erro"
+
+# python-format
+msgid ""
+"Error connecting to local IMAP server: \n"
+"%s"
+msgstr "Não foi possível conectar ao servidor IMAP local: \n"
 
 msgid "Error deleting messages from expresso."
 msgstr "Erro ao excluir mensagens no expresso."
