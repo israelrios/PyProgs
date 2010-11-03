@@ -55,7 +55,7 @@ msgstr "Erro"
 msgid ""
 "Error connecting to local IMAP server: \n"
 "%s"
-msgstr "Não foi possível conectar ao servidor IMAP local: \n"
+msgstr "Não foi possível conectar ao servidor IMAP local: \n%s"
 
 msgid "Error deleting messages from expresso."
 msgstr "Erro ao excluir mensagens no expresso."
