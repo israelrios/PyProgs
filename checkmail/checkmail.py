@@ -32,8 +32,9 @@ class CheckMailService(Service):
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
         self.haveNotify = False
-        self.lastMsg = None
         self.iclient = None
+        self.defaultRefreshMinutes = 3
+        self.lastMsgs = set()
         try:
             self.notify = __import__('pynotify') 
             if self.notify.init("Monitors"):
@@ -102,36 +103,44 @@ class CheckMailService(Service):
 
     def runService(self, timered):
         try:
-            subjects = self.checkNewMail()
+            msgs = self.checkNewMail()
         except:
             # em caso de erro fecha a conexão e tenta novamente 
             if not self.iclient is None:
                 self.closeImap()
                 if self == threading.currentThread():
                     print "CheckMailService: possibly connection failure. Trying again."
-                    subjects = self.checkNewMail()
+                    msgs = self.checkNewMail()
                 else:
                     raise # deve estar testando a conexão
             else:
                 raise # o imap não foi criado, deve ser outra coisa
+
+        # quando tem email usa um refresh menor
+        if len(msgs) > 0:
+            self.refreshMinutes = 0.5 # 30 segundos
+        else:
+            self.refreshMinutes = self.defaultRefreshMinutes
         
-        self.setStatus(subjects, timered)
+        self.setStatus(msgs, timered)
         
-    def processTip(self, subjects, tip):
+    def processTip(self, msgs, tip):
         return tip # pode ser sobreescrito em classes que derivam desta
 
-    def setStatus(self, subjects, timered = False):
-        hasmail = len(subjects) > 0
+    def setStatus(self, msgs, timered = False):
+        #msgs = set com tuples no formato (id, subject)
+        new = msgs - self.lastMsgs
+        hasmail = len(msgs) > 0
         if hasmail:
-            tip = '* ' + '\n* '.join(subjects)
+            tip = '* ' + '\n* '.join([msg[1] for msg in sorted(msgs)])
         else:
             tip = _('No new email')
-        self.setIcon(hasmail, self.processTip(subjects, tip))
-        
+        self.setIcon(hasmail, self.processTip(msgs, tip))
+        self.lastMsgs = msgs
+
         if self.haveNotify:
-            if timered and hasmail and self.lastMsg != tip:
+            if timered and len(new) > 0:
                 self.showNotify(tip)
-            self.lastMsg = tip
     
     def createImapConnection(self):
         return IMAP4_SSL('corp-bsa-exp-mail.bsa.serpro', 993)
@@ -150,7 +159,7 @@ class CheckMailService(Service):
     # Verifica se existem novas mensagens de email que se encaixam nos filtros
     def checkNewMail(self):
         try:
-            subjects = []
+            msgs = set()
             
             if self.iclient is None:
                 self.iclient = self.createImapConnection()
@@ -163,18 +172,19 @@ class CheckMailService(Service):
             self.parseError(typ, msgnums)
             
             if len(msgnums) > 0 and len(msgnums[0].strip()) > 0:
-                typ, msgs = self.iclient.fetch( msgnums[0].replace(' ', ',') , 
+                typ, msgdata = self.iclient.fetch( msgnums[0].replace(' ', ',') , 
                                         '(BODY[HEADER.FIELDS (SUBJECT)])')
-                #print msgs
-                self.parseError(typ, msgs)
-                for m in msgs:
+                #print msgdata
+                self.parseError(typ, msgdata)
+                for m in msgdata:
                     if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
                         #Extrai o subject e decodifica o texto
-                        subjects.append(decode_header(m[1].strip('Subject:').strip()))
+                        localid = int(m[0][:m[0].index('(')])
+                        msgs.add((localid, decode_header(m[1].strip('Subject:').strip())))
             
             self.iclient.close()
 
-            return subjects
+            return msgs
         except Exception, e:
             raise Exception(_(u"It was not possible to check your mail box. Error:") + "\n\n" + str(e))
 
