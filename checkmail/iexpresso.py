@@ -814,6 +814,7 @@ class MailSynchronizer():
                 log( 'Creating folder', folder )
                 (typ, data) = self.client.create( folder.encode('imap4-utf-7') )
                 checkImapError(typ, data)
+                self.client.subscribe( folder.encode('imap4-utf-7') )
                 self.localFolders.add(folder)
     
     def getLocalSignature(self):
