@@ -629,7 +629,11 @@ class MsgList():
             self.msgupdated = True
             msg = self.db[id]
             if msg.id != msgid or msg.folder != msgfolder:
-                del self.eindex[self.ekey(msg.id, msg.folder)]
+                # remove a chave do índice e ela ainda estiver relacionada a esta mensagem
+                oldkey = self.ekey(msg.id, msg.folder)
+                if self.eindex[oldkey] == id:
+                    del self.eindex[oldkey]
+                # atualiza a mensagem e o índice
                 msg.id = msgid
                 msg.folder = msgfolder
                 self.eindex[self.ekey(msgid, msgfolder)] = id
@@ -965,9 +969,9 @@ class MailSynchronizer():
                 if newmsgs == None:
                     #download falhou, faz o download de todas as mensagens pelo modo especial
                     newmsgs = {}
+                # se nem todas as mensagens foram retornadas faz o download especial
                 if len(newmsgs) != len(todownload):
                     # mensagens com caracteres especiais devem ser importadas individualmente
-                    # se nem todas as mensagens foram retornadas agenda o download especial
                     for msg in todownload:
                         if not msg.id in newmsgs:
                             log( 'Getting message using alternative way:', msg.id )
