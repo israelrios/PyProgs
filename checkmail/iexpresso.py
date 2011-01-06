@@ -22,11 +22,11 @@ from htmlentitydefs import name2codepoint as n2cp
 from cStringIO import StringIO
 from StringIO import StringIO as pyStringIO
 
-import email
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import email.utils
 import email.header
+from email.parser import Parser as EmailParser
 from email.generator import Generator as EmailGenerator
 
 import imaplib
@@ -930,15 +930,18 @@ class MailSynchronizer():
                 logError() #ignora exceções nessa parte. (não é fundamental pro funcionamento do sistema)
         
     def getDbId(self, fullmsg):
-        #se não houver um Message-Id adiciona um gerado automaticamente
-        sender = decode_header(fullmsg.get('Sender', '').strip())
+        # se não houver um Message-Id retorna None
         if fullmsg.has_key('Message-Id'):
+            sender = decode_header(fullmsg.get('Sender', '').strip())
             return fullmsg['Message-Id'] + sender
         else:
-            newid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
-            fullmsg.add_header('Message-Id', newid)
-            newid += sender
-            return newid
+            return None
+
+    def genDbId(self, fullmsg):
+        # gera o Message-Id e coloca na mensagem
+        newid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
+        fullmsg.add_header('Message-Id', newid)
+        return self.getDbId(fullmsg)
     
     def strmsg(self, msg):
         fp = StringIO()
@@ -983,14 +986,20 @@ class MailSynchronizer():
                 for msg in todownload:
                     if msg.id in newmsgs:
                         eflags = msg.getFlags()
-                        fullmsg = email.message_from_string( newmsgs[msg.id] )
+                        fullmsg = EmailParser().parsestr( newmsgs[msg.id], headersonly=True )
                         dbid = self.getDbId(fullmsg)
+                        if dbid is None:
+                            # reparse com headersonly = False
+                            fullmsg = EmailParser().parsestr( newmsgs[msg.id] )
+                            dbid = self.genDbId(fullmsg)
+                            self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
+                            newmsgs[msg.id] = self.strmsg(fullmsg)
+
                         log( '  ', msg.id, eflags, dbid ) #fullmsg['Subject'] )
                         if not self.db.exists(dbid):
                             if not localdb.exists(dbid):
-                                self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
                                 self.createLocalFolder(folder_id)
-                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, self.strmsg(fullmsg))
+                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, newmsgs[msg.id])
                                 checkImapError(typ, resp)
                             self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
