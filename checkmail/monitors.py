@@ -16,7 +16,7 @@ import tempfile
 import fcntl
 import gettext
 
-version = "1.8.2"
+version = "1.8.3"
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
@@ -327,7 +327,7 @@ class MonConfig:
         self.password = self.readOption('login', 'pass', '')
         if self.password != '':
             try:
-                self.password = zlib.decompress(self.password)
+                self.password = zlib.decompress(self.password.decode('hex'))
             except:
                 self.password = ''
         self.loadValues()
@@ -354,7 +354,7 @@ class MonConfig:
         
         pw = self.password
         if pw != '':
-            pw = zlib.compress(pw)
+            pw = zlib.compress(pw).encode('hex')
         config.set('login', 'pass', pw)
         
         self.saveValues()
