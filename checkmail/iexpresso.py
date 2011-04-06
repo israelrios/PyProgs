@@ -365,8 +365,11 @@ class ExpressoManager:
         
         if not idx_file:
             return None
-        
-        url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
+        try:
+            url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
+        except:
+            log( "Error downloading full messages.", "   idx_file:", idx_file )
+            raise
         try:
             zfile = zipfile.ZipFile(StringIO(url.read()))
             msgs = {}
