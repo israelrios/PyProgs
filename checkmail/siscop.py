@@ -107,6 +107,7 @@ class SisCopService(Service):
     #   Saída- 11:58
     def check(self):
         try:
+            url = self.opener.open(self.urlSisCop)
             url = self.opener.open(self.urlSisCop, urllib.urlencode(self.fields))
         except Exception, e:
             raise Exception(u"It was not possible to connect at SisCop. Error:\n\n" + str(e))
