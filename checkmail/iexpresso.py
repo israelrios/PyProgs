@@ -174,9 +174,9 @@ def unserialize(str):
 ###########################################
 # pattern to find "\n" within encoded words
 patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)?\?'
-                                    r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
-                                    r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
-                                    r')\?=', re.MULTILINE | re.IGNORECASE)
+                               r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
+                               r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
+                               r')\?=', re.MULTILINE | re.IGNORECASE)
 patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
 patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
 patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
