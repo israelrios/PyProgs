@@ -170,7 +170,7 @@ def unserialize(str):
     return data
 
 ###########################################
-# Fixing of broken subjects
+# EMAIL Message Helpers
 ###########################################
 # pattern to find "\n" within encoded words
 patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)?\?'
@@ -179,26 +179,121 @@ patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)
                                     r')\?=', re.MULTILINE | re.IGNORECASE)
 patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
 patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
+patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+# empty Message-Id's wanted too
+patMessageId = re.compile('^Message-Id: (.*?)\n', re.MULTILINE | re.IGNORECASE)
+#Date: Mon, 21 Jun 2010 10:16:39 -0300
+patDate = re.compile(
+    r'^Date: (?:(?P<wday>[A-Z][a-z][a-z]), )?(?P<day>[0123]?[0-9])'
+    r' (?P<mon>[A-Z][a-z][a-z]) (?P<year>[0-9][0-9][0-9][0-9])'
+    r' (?P<hour>[0-9][0-9]):(?P<min>[0-9][0-9]):(?P<sec>[0-9][0-9])'
+    r' (?P<zonen>[-+])(?P<zoneh>[0-9][0-9])(?P<zonem>[0-9][0-9])[\r\n]', re.MULTILINE)
 
 def fixEncodedWord(subject):
     return patBrokenEncWord.sub(lambda m: re.sub(r'(\r*\n[ \t]| (?=_))', '', m.group()), subject)
 
-def fixSubjectBrokenWord(strmsg):
-    """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
-    mo = patEmptyLine.search(strmsg)
-    if mo != None:
-        headers = strmsg[:mo.start()]
-        mo = patSubject.search(headers)
+class MailMessage:
+    def __init__(self, msgsrc):
+        self.msgsrc = msgsrc
+        self.headers = None
+
+    def getHeaders(self):
+        if self.headers is None:
+            self.headers = self.msgsrc[:self.getHeadersEnd()]
+        return self.headers
+
+    def getHeadersEnd(self):
+        mo = patEmptyLine.search(self.msgsrc)
         if mo != None:
-            subject = mo.group(1)[1:]
-            newsubject = fixEncodedWord(subject)
-            if subject != newsubject:
-                log( "Fixing Subject: ", subject )
-                subject = decode_header(newsubject.rstrip())
-                subject = email.header.Header(subject, 'utf-8').encode()
-                subject = re.sub(r'(?<!\r)\n', '\r\n', subject) + '\r\n'
-                return strmsg[:mo.start(1)+1] + subject + strmsg[mo.end():]
-    return strmsg
+            return mo.start()
+        return len(self.msgsrc)
+
+    def fixSubjectBrokenWord(self):
+        """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
+        try:
+            mo = patSubject.search(self.getHeaders())
+            if mo != None:
+                subject = mo.group(1)[1:]
+                newsubject = fixEncodedWord(subject)
+                if subject != newsubject:
+                    log( "Fixing Subject: ", subject )
+                    subject = decode_header(newsubject.rstrip())
+                    subject = email.header.Header(subject, 'utf-8').encode()
+                    subject = re.sub(r'(?<!\r)\n', '\r\n', subject) + '\r\n'
+                    self.msgsrc = self.msgsrc[:mo.start(1)+1] + subject + self.msgsrc[mo.end():]
+        except:
+            logError() #ignora exceções nessa parte. (não é fundamental pro funcionamento do sistema)
+
+    def getMessageId(self):
+        # se não houver um Message-Id retorna None
+        mo = patMessageId.search(self.getHeaders())
+        if mo != None:
+            return mo.group(1).strip();
+        else:
+            return None
+
+    def getSender(self):
+        mo = patSender.search(self.getHeaders())
+        if mo != None:
+            return decode_header(mo.group(1).strip())
+        return "";
+
+    def setMessageId(self, newid):
+        # coloca o Message-Id e na mensagem.
+        hend = self.getHeadersEnd()
+        self.msgsrc = patMessageId.sub('', self.msgsrc[:hend]) + \
+            'Message-Id: ' + newid + "\r\n" + self.msgsrc[hend:]
+        self.headers = None
+
+    def getMessageDateAsInt(self):
+        """Convert MESSAGE Date to UT.
+        Returns Python date as int.
+        Adapted from imaplib.Internaldate2tuple
+        """
+        mo = patDate.search(self.getHeaders())
+        if mo is None:
+            return None
+    
+        mon = imaplib.Mon2num[mo.group('mon')]
+        zonen = mo.group('zonen')
+    
+        day = int(mo.group('day'))
+        year = int(mo.group('year'))
+        hour = int(mo.group('hour'))
+        min = int(mo.group('min'))
+        sec = int(mo.group('sec'))
+        zoneh = int(mo.group('zoneh'))
+        zonem = int(mo.group('zonem'))
+    
+        # timezone must be subtracted to get UT
+
+        zone = (zoneh*60 + zonem)*60
+        if zonen == '-':
+            zone = -zone
+    
+        tt = (year, mon, day, hour, min, sec, -1, -1, -1)
+    
+        utc = time.mktime(tt)
+    
+        # Following is necessary because the time module has no 'mkgmtime'.
+        # 'mktime' assumes arg in local timezone, so adds timezone/altzone.
+    
+        lt = time.localtime(utc)
+        if time.daylight and lt[-1]:
+            zone = zone + time.altzone
+        else:
+            zone = zone + time.timezone
+    
+        return int(utc - zone)
+
+
+def msgToStr(msg):
+    fp = StringIO()
+    g = EmailGenerator(fp, mangle_from_=False) #mangle_from = False para não por o ">" no início.
+    g.flatten(msg)
+    return fp.getvalue()
+
+
 
 ###########################################
 # HELPERS
@@ -768,14 +863,6 @@ class MailSynchronizer():
         self.client = None
         self.curday = 0
         self.defaultFolders = frozenset(['INBOX', 'INBOX/Sent', 'INBOX/Trash', 'INBOX/Drafts'])
-        self.patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
-        self.patMessageId = re.compile('^Message-Id: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
-        #Date: Mon, 21 Jun 2010 10:16:39 -0300
-        self.patDate = re.compile(
-          r'^Date: (?:(?P<wday>[A-Z][a-z][a-z]), )?(?P<day>[0123]?[0-9])'
-          r' (?P<mon>[A-Z][a-z][a-z]) (?P<year>[0-9][0-9][0-9][0-9])'
-          r' (?P<hour>[0-9][0-9]):(?P<min>[0-9][0-9]):(?P<sec>[0-9][0-9])'
-          r' (?P<zonen>[-+])(?P<zoneh>[0-9][0-9])(?P<zonem>[0-9][0-9])[\r\n]', re.MULTILINE)
         
     def loginLocal(self):
         try:
@@ -885,7 +972,7 @@ class MailSynchronizer():
         msg['From'] = 'iexpresso@localhost'
         msg['To'] = 'iexpresso@localhost'
         msg['Message-ID'] = self.db.signature
-        self.client.append(self.metadataFolder, '(\\Seen)', None, self.strmsg(msg)) 
+        self.client.append(self.metadataFolder, '(\\Seen)', None, msgToStr(msg)) 
     
     def saveDb(self):
         f = open(self.dbpath, 'w+b')
@@ -931,18 +1018,13 @@ class MailSynchronizer():
                             try:
                                 localid = int(m[0][:m[0].index('(')])
                                 flags = imaplib.ParseFlags(m[0])
-                                #extrai o Message-ID
+                                #extrai o dbid
                                 headers = m[1]
-                                moId = self.patMessageId.search(headers)
-                                if moId == None:
+                                mailmessage = MailMessage(headers)
+                                dbid = self.getDbId(mailmessage)
+                                if dbid == None or dbid == '':
                                     raise IExpressoError(_('Error loading local messages.'))
-                                dbid = moId.group(1).strip()
-                                if dbid == '':
-                                    raise IExpressoError(_('Error loading local messages.'))
-                                #if Sender exists put it in the dbid
-                                moSender = self.patSender.search(headers)
-                                if moSender != None:
-                                    dbid += decode_header(moSender.group(1)).strip()
+
                                 if r'\Unseen' in flags:
                                     flags -= (r'\Unseen',)
                                 localdb.add(dbid, localid, '', folder, '(' + ' '.join(flags) + ')')
@@ -962,39 +1044,22 @@ class MailSynchronizer():
                     raise IExpressoError(_('Error loading local messages.'))
         self.closeLocalFolder()
         return localdb
-    
-    def fixSubject(self, fullmsg):
-        if fullmsg.has_key('Subject'):
-            try:
-                #substitu o subject pra evitar um problema que acontece as vezes,
-                # dependendo da formatação do subject
-                subject = fixEncodedWord(fullmsg.get('Subject', ''))
-                subject = decode_header(subject)
-                #log(subject)
-                hsubject = email.header.Header(subject, 'utf-8', continuation_ws=' ')
-                fullmsg.replace_header('Subject', hsubject)
-            except:
-                logError() #ignora exceções nessa parte. (não é fundamental pro funcionamento do sistema)
-        
-    def getDbId(self, fullmsg):
-        # se não houver um Message-Id retorna None
-        if fullmsg.has_key('Message-Id'):
-            sender = decode_header(fullmsg.get('Sender', '').strip())
-            return fullmsg['Message-Id'] + sender
+            
+    def getDbId(self, mailmessage, genId = False):
+        msgid = mailmessage.getMessageId()
+        if msgid != None and msgid != '':
+            # o dbid leva em conta o MESSAGE-ID e o SENDER
+            return msgid + mailmessage.getSender()
         else:
-            return None
-
-    def genDbId(self, fullmsg):
-        # gera o Message-Id e coloca na mensagem
-        newid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
-        fullmsg.add_header('Message-Id', newid)
-        return self.getDbId(fullmsg)
-    
-    def strmsg(self, msg):
-        fp = StringIO()
-        g = EmailGenerator(fp, mangle_from_=False) #mangle_from = False para não por o ">" no início.
-        g.flatten(msg)
-        return fp.getvalue()
+            if not genId:
+                # se não houver um Message-Id retorna None
+                return None
+            # nunca deveria entrar aqui. Somente no caso da mensagem não ter MESSAGE-ID.
+            # gera o Message-Id e coloca na mensagem
+            log( " Generating fake MESSAGE-ID." )
+            newid = '<%f_%d@localhost>' % (time.time(), random.randint(0,100000))
+            mailmessage.setMessageId(newid)
+            return newid + mailmessage.getSender()
 
     def loadExpressoMessages(self, criteria, localdb, folders):
         edb = MsgList()
@@ -1033,22 +1098,14 @@ class MailSynchronizer():
                 for msg in todownload:
                     if msg.id in newmsgs:
                         eflags = msg.getFlags()
-                        fullmsg = EmailParser().parsestr( newmsgs[msg.id], headersonly=True )
-                        dbid = self.getDbId(fullmsg)
-                        if dbid is None:
-                            # nunca deveria entrar aqui. Somente no caso da mensagem não ter MESSAGE-ID.
-                            # reparse com headersonly = False
-                            log( " Generating fake MESSAGE-ID for", msg.id )
-                            fullmsg = EmailParser().parsestr( newmsgs[msg.id] )
-                            dbid = self.genDbId(fullmsg)
-                            self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
-                            newmsgs[msg.id] = self.strmsg(fullmsg)
-
+                        mailmessage = MailMessage( newmsgs[msg.id] )
+                        dbid = self.getDbId(mailmessage, True)
                         log( '  ', msg.id, eflags, dbid ) #fullmsg['Subject'] )
                         if not self.db.exists(dbid):
                             if not localdb.exists(dbid):
                                 self.createLocalFolder(folder_id)
-                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, fixSubjectBrokenWord(newmsgs[msg.id]))
+                                mailmessage.fixSubjectBrokenWord()
+                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, mailmessage.msgsrc)
                                 checkImapError(typ, resp)
                             self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
@@ -1258,7 +1315,8 @@ class MailSynchronizer():
             msgbody = msgsrc[1][1][1]
             
             self.createFolderExpresso(folder)
-            date = self.getMessageDateAsInt(msgheader)
+            mailmessage = MailMessage(msgheader)
+            date = mailmessage.getMessageDateAsInt()
             if not date is None:
                 self.es.importMsgWithTime(folder, msgheader + msgbody, date)
             else:
@@ -1269,13 +1327,13 @@ class MailSynchronizer():
                 msgfile.seek(0)
                 self.es.importMsgs(folder, msgfile)
             #procura o id da mensagem importada
-            moId = self.patMessageId.search(msgheader)
-            if moId == None:
+            moId = mailmessage.getMessageId()
+            if moId == None or moId == '':
                 msgid = dbid #nem sempre o dbid é igual ao MESSAGE-ID
             else:
-                msgid = moId.group(1).strip()
+                msgid = moId
                 log('Searching Message-ID:', msgid) 
-            msgs = self.es.getMsgs('TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços            
+            msgs = self.es.getMsgs('TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços
             if len(msgs) >= 1:
                 msg = msgs[-1] # pega a última
                 self.db.update(dbid, msg.id, folder, msg.getFlags(), msg.hashid)
@@ -1435,48 +1493,6 @@ class MailSynchronizer():
         if r'\Flagged' in flags2 and not r'\Flagged' in flags1:
             diff.append(r'\Unflagged')
         return diff
-    
-    def getMessageDateAsInt(self, msgsource):
-        """Convert MESSAGE Date to UT.
-        Returns Python date as int.
-        Adapted from imaplib.Internaldate2tuple
-        """
-        mo = self.patDate.search(msgsource)
-        if not mo:
-            return None
-    
-        mon = imaplib.Mon2num[mo.group('mon')]
-        zonen = mo.group('zonen')
-    
-        day = int(mo.group('day'))
-        year = int(mo.group('year'))
-        hour = int(mo.group('hour'))
-        min = int(mo.group('min'))
-        sec = int(mo.group('sec'))
-        zoneh = int(mo.group('zoneh'))
-        zonem = int(mo.group('zonem'))
-    
-        # timezone must be subtracted to get UT
-
-        zone = (zoneh*60 + zonem)*60
-        if zonen == '-':
-            zone = -zone
-    
-        tt = (year, mon, day, hour, min, sec, -1, -1, -1)
-    
-        utc = time.mktime(tt)
-    
-        # Following is necessary because the time module has no 'mkgmtime'.
-        # 'mktime' assumes arg in local timezone, so adds timezone/altzone.
-    
-        lt = time.localtime(utc)
-        if time.daylight and lt[-1]:
-            zone = zone + time.altzone
-        else:
-            zone = zone + time.timezone
-    
-        return int(utc - zone)
-
         
     
 def getFolderPath(str):
