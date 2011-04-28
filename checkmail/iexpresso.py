@@ -292,6 +292,14 @@ class ExpressoManager:
         
         self.quota = 0
         self.quotaLimit = 50 #Mega Bytes
+
+        # pattern to find "\n" within encoded words
+        self.patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)?\?'
+                                            r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
+                                            r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
+                                            r')\?=', re.MULTILINE | re.IGNORECASE)
+        self.patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
+        self.patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
         
         #Inicialização
         cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
@@ -359,6 +367,24 @@ class ExpressoManager:
     
     def getMsg(self, msgfolder, msgid):
         return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid, 'msg_folder' : msgfolder.encode('iso-8859-1')}))
+
+    def fixSubjectBrokenWord(self, strmsg):
+        """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
+        mo = self.patEmptyLine.search(strmsg)
+        if mo != None:
+            headers = strmsg[:mo.start()]
+            mo = self.patSubject.search(headers)
+            if mo != None:
+                subject = mo.group(1)[1:]
+                newsubject = self.patBrokenEncWord.sub(lambda m: re.sub(r'(\r*\n[ \t]| (?=_))', '', m.group()), subject)
+                if subject != newsubject:
+                    log( "Fixing Subject: ", subject )
+                    subject = decode_header(newsubject.rstrip())
+                    subject = email.header.Header(subject, 'utf-8').encode()
+                    subject = re.sub(r'(?<!\r)\n', '\r\n', subject) + '\r\n'
+                    return strmsg[:mo.start(1)+1] + subject + strmsg[mo.end():]
+        return strmsg
+
     
     def getFullMsgs(self, msgfolder, msgsid):
         idx_file = self.callExpresso(self.urlMakeEml, {'folder': msgfolder.encode('utf-8'), 'msgs_to_export': msgsid}, True)
@@ -381,7 +407,7 @@ class ExpressoManager:
                 idstart = name.rindex('_') + 1
                 if idstart <= 0:
                     continue # id não identificado
-                msgs[int(name[idstart : -4])] = source
+                msgs[int(name[idstart : -4])] = self.fixSubjectBrokenWord( source )
             zfile.close()
         except zipfile.BadZipfile, e:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
@@ -402,7 +428,7 @@ class ExpressoManager:
         url.close()
         if not "From:" in source:
             return None #mensagem inválida
-        return source
+        return self.fixSubjectBrokenWord( source )
     
     def importMsgs(self, msgfolder, file):
         url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
