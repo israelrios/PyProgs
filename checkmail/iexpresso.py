@@ -69,15 +69,8 @@ def compressLog():
             zf.close()
         os.remove(logfile)
 
-class IExpressoError(Exception):
-    pass
-
-class LoginError(IExpressoError):
-    '''
-    Exception thrown upon login failures.
-    '''
-    pass
-
+###################################
+# Response parser functions
 def substitute_entity(match):
     ent = match.group(2)
     if match.group(1) == "#":
@@ -94,12 +87,143 @@ def decode_htmlentities(string):
     entity_re = re.compile("&(#?)(\d{1,5}|\w{1,8});")
     return entity_re.subn(substitute_entity, string)[0]
 
+# Portei este código do arquivo connector.js do expresso.
+def matchBracket(str, iniPos):
+    nClose = iniPos
+    while True:
+        nOpen = str.find('{', nClose+1)
+        nClose = str.find('}', nClose+1)
+        if (nOpen == -1):
+            return nClose
+
+        if (nOpen < nClose ):
+            nClose = matchBracket(str, nOpen)
+
+        if (nOpen >= nClose):
+            return nClose
+
+###########################################################
+# Faz o parse da resposta do expresso. Portei este código do arquivo connector.js do expresso.
+# Formato:
+#   a:n:{s:n:"";i:k;};
+#   Saída: dicionário com os valores
+def unserialize(str):
+    type = str[0]
+    if type == 'a':
+        n = int( str[str.index(':')+1 : str.index(':',2)] )
+        arrayContent = str[str.index('{')+1 : str.rindex('}')]
+
+        data = {}
+        for i in range(n):
+            pos = 0
+
+            #/* Process Index */
+            indexStr = arrayContent[ : arrayContent.index(';')+1]
+            index = unserialize(indexStr)
+
+            pos = arrayContent.index(';', pos)+1
+
+            #/* Process Content */
+            subtype = arrayContent[pos]
+            if subtype == 'a':
+                endpos = matchBracket(arrayContent, arrayContent.index('{', pos))+1
+                part = arrayContent[pos: endpos]
+                pos = endpos
+                data[index] = unserialize(part)
+
+            elif subtype == 's':
+                pval = arrayContent.index(':', pos+2)
+                val  = int(arrayContent[pos+2 : pval])
+                pos = pval + val + 4
+                data[index] = arrayContent[pval+2 : pval + 2 + val]
+
+            else:
+                endpos = arrayContent.index(';', pos)+1
+                part = arrayContent[pos : endpos]
+                pos = endpos
+                data[index] = unserialize(part)
+            arrayContent = arrayContent[pos:]
+
+    elif type == 's':
+        pos = str.index(':', 2)
+        val = int(str[2 : pos])
+        data = str[pos+2 : pos + 2 + val]
+        #str = str[pos + 4 + val : ]
+
+    elif type == 'i' or type == 'd':
+        pos = str.index(';')
+        data = int(str[2  : pos])
+        #str = str[pos + 1 : ]
+
+    elif type == 'N':
+        data = None
+        #str = str[str.index(';') + 1 : ]
+
+    elif type == 'b':
+        if str[2] == '1':
+            data = True
+        else:
+            data = False
+    else:
+        raise Exception(_('Invalid response format from Expresso.'))
+
+    return data
+
+###########################################
+# Fixing of broken subjects
+###########################################
+# pattern to find "\n" within encoded words
+patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)?\?'
+                                    r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
+                                    r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
+                                    r')\?=', re.MULTILINE | re.IGNORECASE)
+patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
+patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
+
+def fixEncodedWord(subject):
+    return patBrokenEncWord.sub(lambda m: re.sub(r'(\r*\n[ \t]| (?=_))', '', m.group()), subject)
+
+def fixSubjectBrokenWord(strmsg):
+    """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
+    mo = patEmptyLine.search(strmsg)
+    if mo != None:
+        headers = strmsg[:mo.start()]
+        mo = patSubject.search(headers)
+        if mo != None:
+            subject = mo.group(1)[1:]
+            newsubject = fixEncodedWord(subject)
+            if subject != newsubject:
+                log( "Fixing Subject: ", subject )
+                subject = decode_header(newsubject.rstrip())
+                subject = email.header.Header(subject, 'utf-8').encode()
+                subject = re.sub(r'(?<!\r)\n', '\r\n', subject) + '\r\n'
+                return strmsg[:mo.start(1)+1] + subject + strmsg[mo.end():]
+    return strmsg
+
+###########################################
+# HELPERS
+##########################################
+def checkImapError(typ, resp):
+    if typ != 'OK':
+        if len(resp) > 0:
+            raise Exception(resp[0])
+        else:
+            raise Exception(_('Bad response.'))
+
 
 class NamedStringIO(pyStringIO):
     def __init__(self, name, buffer = None):
         self.name = name
         pyStringIO.__init__(self, buffer)
 
+class IExpressoError(Exception):
+    pass
+
+class LoginError(IExpressoError):
+    '''
+    Exception thrown upon login failures.
+    '''
+    pass
 
 # expresso msg fields:
 # ContentType: string
@@ -293,14 +417,6 @@ class ExpressoManager:
         self.quota = 0
         self.quotaLimit = 50 #Mega Bytes
 
-        # pattern to find "\n" within encoded words
-        self.patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)?\?'
-                                            r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
-                                            r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
-                                            r')\?=', re.MULTILINE | re.IGNORECASE)
-        self.patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
-        self.patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
-        
         #Inicialização
         cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
         self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookies), MultipartPostHandler )
@@ -367,24 +483,6 @@ class ExpressoManager:
     
     def getMsg(self, msgfolder, msgid):
         return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid, 'msg_folder' : msgfolder.encode('iso-8859-1')}))
-
-    def fixSubjectBrokenWord(self, strmsg):
-        """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
-        mo = self.patEmptyLine.search(strmsg)
-        if mo != None:
-            headers = strmsg[:mo.start()]
-            mo = self.patSubject.search(headers)
-            if mo != None:
-                subject = mo.group(1)[1:]
-                newsubject = self.patBrokenEncWord.sub(lambda m: re.sub(r'(\r*\n[ \t]| (?=_))', '', m.group()), subject)
-                if subject != newsubject:
-                    log( "Fixing Subject: ", subject )
-                    subject = decode_header(newsubject.rstrip())
-                    subject = email.header.Header(subject, 'utf-8').encode()
-                    subject = re.sub(r'(?<!\r)\n', '\r\n', subject) + '\r\n'
-                    return strmsg[:mo.start(1)+1] + subject + strmsg[mo.end():]
-        return strmsg
-
     
     def getFullMsgs(self, msgfolder, msgsid):
         idx_file = self.callExpresso(self.urlMakeEml, {'folder': msgfolder.encode('utf-8'), 'msgs_to_export': msgsid}, True)
@@ -407,7 +505,7 @@ class ExpressoManager:
                 idstart = name.rindex('_') + 1
                 if idstart <= 0:
                     continue # id não identificado
-                msgs[int(name[idstart : -4])] = self.fixSubjectBrokenWord( source )
+                msgs[int(name[idstart : -4])] = source
             zfile.close()
         except zipfile.BadZipfile, e:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
@@ -428,7 +526,7 @@ class ExpressoManager:
         url.close()
         if not "From:" in source:
             return None #mensagem inválida
-        return self.fixSubjectBrokenWord( source )
+        return source
     
     def importMsgs(self, msgfolder, file):
         url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
@@ -517,95 +615,10 @@ class ExpressoManager:
         data = self.callExpresso(self.urlAutoClean, {'before_date': past_days_count})
         log( "AutoClean(%d) response:" % past_days_count, data )
 
-# Portei este código do arquivo connector.js do expresso.
-def matchBracket(str, iniPos):
-    nClose = iniPos
-    while True:
-        nOpen = str.find('{', nClose+1)
-        nClose = str.find('}', nClose+1)
-        if (nOpen == -1):
-            return nClose
 
-        if (nOpen < nClose ):
-            nClose = matchBracket(str, nOpen)
-            
-        if (nOpen >= nClose):
-            return nClose
-
-###########################################################
-# Faz o parse da resposta do expresso. Portei este código do arquivo connector.js do expresso.
-# Formato:
-#   a:n:{s:n:"";i:k;};
-#   Saída: dicionário com os valores
-def unserialize(str):
-    type = str[0]
-    if type == 'a':
-        n = int( str[str.index(':')+1 : str.index(':',2)] )
-        arrayContent = str[str.index('{')+1 : str.rindex('}')]
-        
-        data = {}
-        for i in range(n):
-            pos = 0
-
-            #/* Process Index */
-            indexStr = arrayContent[ : arrayContent.index(';')+1]
-            index = unserialize(indexStr)
-            
-            pos = arrayContent.index(';', pos)+1
-
-            #/* Process Content */
-            subtype = arrayContent[pos]
-            if subtype == 'a':
-                endpos = matchBracket(arrayContent, arrayContent.index('{', pos))+1
-                part = arrayContent[pos: endpos]
-                pos = endpos
-                data[index] = unserialize(part)
-
-            elif subtype == 's':
-                pval = arrayContent.index(':', pos+2)
-                val  = int(arrayContent[pos+2 : pval])
-                pos = pval + val + 4
-                data[index] = arrayContent[pval+2 : pval + 2 + val]
-                
-            else:
-                endpos = arrayContent.index(';', pos)+1
-                part = arrayContent[pos : endpos]
-                pos = endpos
-                data[index] = unserialize(part)
-            arrayContent = arrayContent[pos:]
-            
-    elif type == 's':
-        pos = str.index(':', 2)
-        val = int(str[2 : pos])
-        data = str[pos+2 : pos + 2 + val]
-        #str = str[pos + 4 + val : ]
-
-    elif type == 'i' or type == 'd':
-        pos = str.index(';')
-        data = int(str[2  : pos])
-        #str = str[pos + 1 : ]
-        
-    elif type == 'N':
-        data = None
-        #str = str[str.index(';') + 1 : ]
-                    
-    elif type == 'b':
-        if str[2] == '1':
-            data = True
-        else:
-            data = False
-    else:
-        raise Exception(_('Invalid response format from Expresso.'))
-        
-    return data    
-    
-def checkImapError(typ, resp):
-    if typ != 'OK':
-        if len(resp) > 0:
-            raise Exception(resp[0])
-        else:
-            raise Exception(_('Bad response.'))
-        
+##################################################
+# MSG DB
+##################################################
 class MsgItem():
     def __init__(self, msgid, hashid, msgfolder, msgflags):
         self.id = msgid
@@ -741,6 +754,10 @@ class MsgList():
                 self.add(parts[0].decode('utf-8'), int(parts[1]), '', parts[2].decode('utf-8'), parts[3].decode('utf-8'))
             line = file.readline().strip()
 
+
+#########################################################
+# MailSynchronizer
+#########################################################
 class MailSynchronizer():
     metadataFolder = 'INBOX/_metadata_dont_delete'
     def __init__(self):
@@ -951,7 +968,8 @@ class MailSynchronizer():
             try:
                 #substitu o subject pra evitar um problema que acontece as vezes,
                 # dependendo da formatação do subject
-                subject = decode_header(fullmsg.get('Subject', ''))
+                subject = fixEncodedWord(fullmsg.get('Subject', ''))
+                subject = decode_header(subject)
                 #log(subject)
                 hsubject = email.header.Header(subject, 'utf-8', continuation_ws=' ')
                 fullmsg.replace_header('Subject', hsubject)
@@ -1018,7 +1036,9 @@ class MailSynchronizer():
                         fullmsg = EmailParser().parsestr( newmsgs[msg.id], headersonly=True )
                         dbid = self.getDbId(fullmsg)
                         if dbid is None:
+                            # nunca deveria entrar aqui. Somente no caso da mensagem não ter MESSAGE-ID.
                             # reparse com headersonly = False
+                            log( " Generating fake MESSAGE-ID for", msg.id )
                             fullmsg = EmailParser().parsestr( newmsgs[msg.id] )
                             dbid = self.genDbId(fullmsg)
                             self.fixSubject(fullmsg) #necessário porque senão aparece o subject codificado no thunderbird.
@@ -1028,7 +1048,7 @@ class MailSynchronizer():
                         if not self.db.exists(dbid):
                             if not localdb.exists(dbid):
                                 self.createLocalFolder(folder_id)
-                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, newmsgs[msg.id])
+                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, fixSubjectBrokenWord(newmsgs[msg.id]))
                                 checkImapError(typ, resp)
                             self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
