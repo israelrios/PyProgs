@@ -577,7 +577,8 @@ class ExpressoManager:
             raise Exception(res.replace('<br />', ''))
 
     def getMsg(self, msgfolder, msgid):
-        return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid, 'msg_folder' : msgfolder.encode('iso-8859-1')}))
+        return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid,
+                                                                  'msg_folder' : msgfolder.encode('iso-8859-1')}))
 
     def getFullMsgs(self, msgfolder, msgsid):
         idx_file = self.callExpresso(self.urlMakeEml, {'folder': msgfolder.encode('utf-8'), 'msgs_to_export': msgsid}, True)
@@ -635,8 +636,9 @@ class ExpressoManager:
     def importMsgWithTime(self, msgfolder, source, msgtime):
         """ Faz o import com o método unarchive_mail.
             Este método possibilita a informação da data da mensagem. """
-        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.unarchive_mail',
-                                                    'source': source, 'timestamp' : msgtime}, True)
+        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'),
+                                                '_action': '$this.imap_functions.unarchive_mail',
+                                                'source': source, 'timestamp' : msgtime}, True)
         url.close()
         #verifica se aconteceu algum erro
         result = self.callExpresso(self.urlGetReturnExecuteForm)
