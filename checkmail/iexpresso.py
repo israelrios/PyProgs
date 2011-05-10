@@ -1176,9 +1176,9 @@ class MailSynchronizer():
         day = datetime.date.today().toordinal() # o número de dias desde 1-1-1
 
         if day != self.curday: # verifica se o dia mudou desde a última iteração
-            self.curday = day
             self.syncFolders()
             self.es.autoClean() # remove da lixeira as mensagens mais antigas.
+            self.curday = day
 
         return localdb
 
