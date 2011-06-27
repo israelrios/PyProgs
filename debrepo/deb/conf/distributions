@@ -1,7 +1,7 @@
 Origin: Israel Rios
 Label: Israel Rios
 Codename: stable
-Architectures: all i386
+Architectures: i386
 Components: main
 Description: Israel Rios APT Repository
 DebIndices: Packages Release . .bz2
