@@ -340,6 +340,9 @@ class LoginError(IExpressoError):
 # to: dict {name: string, email: string}
 # Recent: flag
 
+def makeEmailDesc(person):
+    return '%s <%s>' % (email.utils.quote(decode_htmlentities(person['name'] or '')), person['email'] or '')
+
 class ExpressoMessage:
     def checkFlag(self, flag):
         if isinstance(flag, bool):
@@ -354,8 +357,8 @@ class ExpressoMessage:
                 self.contentType = 'normal'
             if 'msg_day' in values:
                 self.date = datetime.datetime.strptime(values['msg_day'] + values['msg_hour'], '%d/%m/%Y%H:%M')
-            elif 'udate' in values:
-                self.date = datetime.datetime.utcfromtimestamp(values['udate'] - 1800) #1800 pra corrigir a diferença com o PHP
+            elif 'timestamp' in values:
+                self.date = datetime.datetime.utcfromtimestamp(values['timestamp'])
             else:
                 self.date = datetime.datetime.strptime(values['smalldate'], '%d/%m/%Y')
             if 'body' in values:
@@ -390,15 +393,13 @@ class ExpressoMessage:
             self.recent = self.checkFlag(values['Recent'])
 
             if 'from' in values:
-                person = values['from']
-                self.sfrom = '%s <%s>' % (email.utils.quote(decode_htmlentities(person['name'])), person['email'])
+                self.sfrom = makeEmailDesc(values['from'])
             else:
                 self.sfrom = ''
             if 'toaddress2' in values:
                 self.to = decode_htmlentities(values['toaddress2'])
             else:
-                person = values['to']
-                self.to = '%s <%s>' % (email.utils.quote(decode_htmlentities(person['name'])), person['email'])
+                self.to = makeEmailDesc(values['to'])
 
             if 'attachment' in values and values['attachment']['number_attachments'] > 0:
                 self.attachmentNames = values['attachment']['names']
