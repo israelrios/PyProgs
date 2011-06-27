@@ -322,11 +322,12 @@ class LoginError(IExpressoError):
 
 # expresso msg fields:
 # ContentType: string
-# aux_date: string(dd/mm/yyyy)
+# smalldate: string(dd/mm/yyyy)
 # msg_number: number
 # Importance: flag
+# timestamp: date in seconds
 # msg_sample: dict {body : string}
-# udate: string
+# udate: date in seconds
 # subject: string
 # Answered: flag
 # Size: string
@@ -353,8 +354,10 @@ class ExpressoMessage:
                 self.contentType = 'normal'
             if 'msg_day' in values:
                 self.date = datetime.datetime.strptime(values['msg_day'] + values['msg_hour'], '%d/%m/%Y%H:%M')
+            elif 'udate' in values:
+                self.date = datetime.datetime.utcfromtimestamp(values['udate'] - 1800) #1800 pra corrigir a diferença com o PHP
             else:
-                self.date = datetime.datetime.strptime(values['aux_date'], '%d/%m/%Y')
+                self.date = datetime.datetime.strptime(values['smalldate'], '%d/%m/%Y')
             if 'body' in values:
                 self.full = True
                 self.body = values['body']
@@ -480,7 +483,7 @@ class ExpressoManager:
     urlAction = urlController + '?action=$this.'
     urlImapFunc = urlAction + 'imap_functions.'
     urlCheck = urlImapFunc + 'get_range_msgs2&msg_range_begin=1&msg_range_end=5000&sort_box_type=SORTARRIVAL&sort_box_reverse=1&'
-    urlListFolders = urlImapFunc + 'get_folders_list'
+    urlListFolders = urlImapFunc + 'get_folders_list&onload=true'
     urlMoveMsgs = urlImapFunc + 'move_messages&border_ID=null&sort_box_type=SORTARRIVAL&search_box_type=ALL&sort_box_reverse=1&reuse_border=null&get_previous_msg=0&'
     urlSetFlags = urlImapFunc + 'set_messages_flag&'
     urlGetMsg = urlImapFunc + 'get_info_msg&'
@@ -510,7 +513,7 @@ class ExpressoManager:
         self.logged = False
 
         self.quota = 0
-        self.quotaLimit = 50 #Mega Bytes
+        self.quotaLimit = 51200 #Kylo Bytes
 
         #Inicialização
         cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
@@ -633,24 +636,36 @@ class ExpressoManager:
         if 'error' in result and result['error'].strip() != '':
             raise Exception(result['error'])
 
-    def importMsgWithTime(self, msgfolder, source, msgtime):
+    def importMsgWithTime(self, msgfolder, source, msgtime, flagset):
         """ Faz o import com o método unarchive_mail.
             Este método possibilita a informação da data da mensagem. """
+
+        # converte os flags para o formato da função do expresso
+        flagmap = [('\\Answered','A'), ('\\Draft','X'), ('\\Flagged','F'), ('\\Unseen','U')]
+        eflags = [];
+        for (flagname, flagsymbol) in flagmap:
+            if flagname in flagset:
+                eflags.append(flagsymbol)
+            else:
+                eflags.append('')
+
         url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'),
                                                 '_action': '$this.imap_functions.unarchive_mail',
-                                                'source': source, 'timestamp' : msgtime}, True)
+                                                'source': source, 'timestamp' : msgtime, 'flags' : ':'.join(eflags)}, True)
         url.close()
         #verifica se aconteceu algum erro
         result = self.callExpresso(self.urlGetReturnExecuteForm)
         if 'error' in result and not isinstance(result['error'], bool) and result['error'].strip() != '':
             raise Exception(result['error'])
         #no result tem o número da mensagem inserida dentro da pasta
-        #return result['msg_no']
+        return result['msg_no']
 
     def setMsgFlag(self, msgfolder, msgid, flag):
         self.callExpresso(self.urlSetFlags, {'flag': flag.lower(), 'msgs_to_set' : msgid, 'folder' : msgfolder.encode('iso-8859-1')})
 
     def getMsgs(self, criteria, folder):
+        """ Por motivos de compatibilidade o atributo criteria deve estar entre: "ALL", "UNSEEN" e "SEEN".
+        """
         filterParam = {'search_box_type': criteria.encode('iso-8859-1'), 'folder': folder.encode('iso-8859-1')}
 
         data = self.callExpresso(self.urlCheck, filterParam)
@@ -800,19 +815,22 @@ class MsgList():
     def wasModified(self):
         return self.updated or self.msgupdated
 
+    def saveSet(self, setToSave, file):
+        if setToSave is None:
+            file.write('0\n')
+        else:
+            file.write(str(len(setToSave)))
+            file.write('\n')
+            for item in setToSave:
+                file.write(item.encode('utf-8'))
+                file.write('\n')
+
     def save(self, file):
         file.write("5\n") # versão
         file.write(self.signature.encode('utf-8'))
         file.write('\n')
         # write folders
-        if self.folders is None:
-            file.write('0\n')
-        else:
-            file.write(str(len(self.folders)))
-            file.write('\n')
-            for folder in self.folders:
-                file.write(folder.encode('utf-8'))
-                file.write('\n')
+        self.saveSet(self.folders, file)
         # write messages
         for id, msg in self.db.items():
             file.write(id.encode('utf-8'))
@@ -827,6 +845,13 @@ class MsgList():
             file.write('\n')
         self.isNew = False
 
+    def loadSet(self, file):
+        lset = set()
+        count = int(file.readline().strip())
+        for i in range(count):
+            lset.add(file.readline().strip().decode('utf-8'))
+        return lset
+
     def load(self, file):
         line = file.readline().strip()
         version = int(line)
@@ -836,11 +861,8 @@ class MsgList():
         self.signature = file.readline().strip()
         self.isNew = False
         #load folders
-        self.folders = set()
         if version >= 4:
-            folderCount = int(file.readline().strip())
-            for i in range(folderCount):
-                self.folders.add(file.readline().strip().decode('utf-8'))
+            self.folders = self.loadSet(file)
         #load messages
         line = file.readline().strip()
         while line != '':
@@ -922,7 +944,7 @@ class MailSynchronizer():
             raise IExpressoError(_('You must remove the file "%s".') % self.dbpath)
 
     def getQuotaStr(self):
-        return _("%(quota)d%% of %(quotaLimit)dMB") % {"quota": self.es.quota, "quotaLimit": self.es.quotaLimit}
+        return _("%(quota)d%% of %(quotaLimit)dMB") % {"quota": self.es.quota, "quotaLimit": self.es.quotaLimit / (1024)}
 
     def syncFolders(self):
         self.getLocalFolders()
@@ -1072,7 +1094,9 @@ class MailSynchronizer():
             for msg in msgs:
                 dbid = self.db.getId(msg.id, folder_id)
                 if dbid != None:
-                    if self.db.getHashId(dbid) != msg.hashid:
+                    hashid = self.db.getHashId(dbid)
+                    # hashid == '' means "Imported and not synced"
+                    if hashid != '' and hashid != msg.hashid:
                         #atualiza toda a pasta
                         log( "Re-downloading entire folder." )
                         todownload = list(msgs)
@@ -1131,15 +1155,13 @@ class MailSynchronizer():
             localdb = self.initUpdate()
 
             try:
-                importedIds = self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True) #move, deleta e atualiza as mensagens no expresso
+                #move, deleta e atualiza as mensagens no expresso
+                self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True)
 
                 edb = self.loadExpressoMessages('ALL', localdb, self.db.folders)
                 # o usuário pode ter alterado a estrutura local enquanto as mensagens do expresso eram carregadas
                 # por isso deve-se recarregar o banco local
                 localdb = self.loadLocalMsgs()
-
-                if not importedIds.isEmpty():
-                    self.changeExpresso(importedIds) # corrige os flags das mensagens importadas
 
                 #remove as mensagens que não estão mais na caixa do expresso da caixa local
                 self.changeLocal(edb, localdb)
@@ -1319,26 +1341,19 @@ class MailSynchronizer():
             self.createFolderExpresso(folder)
             mailmessage = MailMessage(msgheader)
             date = mailmessage.getMessageDateAsInt()
-            if not date is None:
-                self.es.importMsgWithTime(folder, msgheader + msgbody, date)
-            else:
+            if date is None:
                 log('Importing message without date info.')
-                msgfile = NamedStringIO('email.eml')
-                msgfile.write(msgheader)
-                msgfile.write(msgbody)
-                msgfile.seek(0)
-                self.es.importMsgs(folder, msgfile)
-            #procura o id da mensagem importada
-            moId = mailmessage.getMessageId()
-            if moId == None or moId == '':
-                msgid = dbid #nem sempre o dbid é igual ao MESSAGE-ID
+                date = time.mktime(time.localtime())
+
+            flagset = set(localflags[1:-1].split())
+            if not '\\Seen' in flagset:
+                flagset.add('\\Unseen')
+            eid = self.es.importMsgWithTime(folder, msgheader + msgbody, date, flagset)
+            if eid is None or str(eid) == '':
+                log('Error importing message: ', dbid, eid)
             else:
-                msgid = moId
-                log('Searching Message-ID:', msgid)
-            msgs = self.es.getMsgs('TEXT "Message-ID: %s"' % msgid, folder) # essa busca não é sensível a casa e nem a espaços
-            if len(msgs) >= 1:
-                msg = msgs[-1] # pega a última
-                self.db.update(dbid, msg.id, folder, msg.getFlags(), msg.hashid)
+                self.db.update(dbid, eid, folder, localflags, '')
+
         self.closeLocalFolder()
 
     def askDeleteMessages(self, todelete):
@@ -1403,8 +1418,6 @@ class MailSynchronizer():
         tomove = {}
         newflags = {}
 
-        importedIds = MsgList()
-
         def moveAfter(efolder, newfolder, eid):
             pair = (efolder, newfolder)
             #log( pair, id )
@@ -1446,13 +1459,10 @@ class MailSynchronizer():
                 if msgflags.find(r'\Deleted') < 0 and not msgfolder.endswith('/Trash'):
                     #por enquanto só importa itens que tenham um Message-ID
                     self.importMsgExpresso(msgfolder, msgid, msgflags, id)
-                    importedIds.add(id, msgid, '', msgfolder, msgflags)
 
         self.flagMessagesExpresso(toflag, newflags)
 
         self.moveMessagesExpresso(tomove)
-
-        return importedIds
 
     def mapFlagsExpresso(self, toflag, eid, efolder, eflags, diff):
         newflags = set(eflags[1:-1].split())
