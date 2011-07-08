@@ -91,7 +91,7 @@ class SisCopService(Service):
             #verifica se o usuário está na máquina
             bus = dbus.SessionBus()
             ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
-            mustShowPage = not ssaver.GetSessionIdle()
+            mustShowPage = not ssaver.GetActive()
             try:
               ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
             except:
