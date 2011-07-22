@@ -127,12 +127,15 @@ class CheckMailService(Service):
     def processTip(self, msgs, tip):
         return tip # pode ser sobreescrito em classes que derivam desta
 
+    def joinMsgSubjects(self, msgs):
+        return '* ' + '\n* '.join([msg[1] for msg in sorted(msgs)])
+
     def setStatus(self, msgs, timered = False):
         #msgs = set com tuples no formato (id, subject)
         new = msgs - self.lastMsgs
         hasmail = len(msgs) > 0
         if hasmail:
-            tip = '* ' + '\n* '.join([msg[1] for msg in sorted(msgs)])
+            tip = self.joinMsgSubjects(msgs)
         else:
             tip = _('No new email')
         self.setIcon(hasmail, self.processTip(msgs, tip))
@@ -140,7 +143,7 @@ class CheckMailService(Service):
 
         if self.haveNotify:
             if timered and len(new) > 0:
-                self.showNotify(tip)
+                self.showNotify(self.joinMsgSubjects(new))
     
     def createImapConnection(self):
         return IMAP4_SSL('corp-bsa-exp-mail.bsa.serpro', 993)
