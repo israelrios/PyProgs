@@ -906,11 +906,14 @@ class MailSynchronizer():
         self.user = user
         self.password = password
         self.checkPreConditions()
-        self.es = ExpressoManager(user, password)
+        self.loginExpresso()
         self.curday = 0
         self.loginLocal()
         self.db = self.loadDb()
         self.smartFolders = None
+
+    def loginExpresso(self):
+        self.es = ExpressoManager(self.user, self.password)
 
     def close(self):
         log( 'Shutting down ...' )
@@ -1153,6 +1156,7 @@ class MailSynchronizer():
         compressLog()
         log( '* Full refresh -', time.asctime() )
         try:
+            self.loginExpresso() # full refresh does a relogin to avoid problems with dirty sessions
             localdb = self.initUpdate()
 
             try:
