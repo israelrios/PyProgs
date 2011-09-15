@@ -543,14 +543,12 @@ class ExpressoManager:
     def doLogin(self):
         try:
             url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
+            url.close()
+
+            # chama o index para inicializar os atributos na sessão do servidor
+            url = self.opener.open(self.urlIndex)
             self.logged = not url.geturl().startswith(self.urlLogin)
             url.close()
-            if self.logged:
-                # chama o index para inicializar os atributos na sessão do servidor
-                url = self.opener.open(self.urlIndex)
-                url.close()
-                if url.geturl().startswith(self.urlLogin):
-                    raise LoginError(_(u"It was not possible to connect at Expresso."))
         except Exception, e:
             raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + str(e))
         if not self.logged:
