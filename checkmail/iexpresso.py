@@ -1355,7 +1355,13 @@ class MailSynchronizer():
             if eid is None or str(eid) == '':
                 log('Error importing message: ', dbid, eid)
             else:
-                self.db.update(dbid, eid, folder, localflags, '')
+                curid = self.db.getId(eid, folder)
+                if curid != None and curid != dbid:
+                    log('Error importing message (invalid return value): ', eid, curid, dbid)
+                    # o import será realizado novamente no próximo full refresh.
+                else:
+                    log( '  ', eid, localflags, dbid )
+                    self.db.update(dbid, eid, folder, localflags, '')
 
         self.closeLocalFolder()
 
