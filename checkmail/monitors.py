@@ -16,7 +16,7 @@ import tempfile
 import fcntl
 import gettext
 
-version = "1.12.0"
+version = "1.12.1"
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
@@ -381,6 +381,10 @@ class MonConfig:
         if autofile == None or enabled == self.isAutoStartEnabled():
             return
         if enabled:
+            # checks the autostart directory
+            autodir = os.path.dirname(autofile)
+            if not os.path.exists(autodir):
+                os.makedirs(autodir)
             # copy the autostart desktop file
             source = self.app.desktopFile
             if not os.path.isabs(source):
