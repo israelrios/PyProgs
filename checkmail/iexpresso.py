@@ -510,6 +510,7 @@ class ExpressoManager:
         self.fields['user'] = user
         self.fields['login'] = user
         self.fields['passwd'] = passwd
+        self.fields['certificado'] = ''
 
         self.logged = False
 
@@ -648,7 +649,7 @@ class ExpressoManager:
             else:
                 eflags.append('')
 
-        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'),
+        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('utf-8'),
                                                 '_action': '$this.imap_functions.unarchive_mail',
                                                 'source': source, 'timestamp' : msgtime, 'flags' : ':'.join(eflags)}, True)
         url.close()
