@@ -641,7 +641,7 @@ class ExpressoManager:
             Este método possibilita a informação da data da mensagem. """
 
         # converte os flags para o formato da função do expresso
-        flagmap = [('\\Answered','A'), ('\\Draft','X'), ('\\Flagged','F'), ('\\Unseen','U')]
+        flagmap = [('\\Answered','A'), ('\\Draft','X'), ('\\Flagged','F'), ('\\Unseen','U'), ('$Forwarded', 'F')]
         eflags = [];
         for (flagname, flagsymbol) in flagmap:
             if flagname in flagset:
