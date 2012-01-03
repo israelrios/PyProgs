@@ -17,7 +17,7 @@ cp -a {mail-read.png,mail-unread.{png,svg}} $dir
 cp -a iexpresso-auto.desktop $dir
 cp -a dovecot*.conf $dir
 #gmail checker
-cp -a gmail*.{py,svg,png,desktop} $dir
+cp -a gmail*.{py,png,desktop} $dir
 
 #refresh po's
 #cd po
