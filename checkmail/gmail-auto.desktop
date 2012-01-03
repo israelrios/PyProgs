@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Encoding=UTF-8
+Name=Gmail Checker
+Type=Application
+Terminal=false
+Categories=Application;Network;
+Exec=/usr/share/iexpresso/gmail.py -auto
+Comment=Gmail new mail checker
+Comment[pt_BR]=Verificador de email para o Gmail
+Icon=/usr/share/iexpresso/gmail-unread.png

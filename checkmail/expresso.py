@@ -3,7 +3,7 @@
 # Autor: Israel Rios
 # Created: 9-nov-2009
 
-from checkmail import CheckMailService
+from imapcheckmail import ImapCheckMailService
 
 import threading
 from imaplib import IMAP4
@@ -14,9 +14,9 @@ import time
 from iexpresso import MailSynchronizer
 
 
-class ExpressoService(CheckMailService):
+class ExpressoService(ImapCheckMailService):
     def __init__(self, app, user, passwd):
-        CheckMailService.__init__(self, app, user, passwd)
+        ImapCheckMailService.__init__(self, app, user, passwd)
         self.sync = MailSynchronizer()
         self.sync.deleteHandler = self
         self.refreshcount = 0
@@ -33,7 +33,7 @@ class ExpressoService(CheckMailService):
     
     def onQuit(self):
         try:
-            CheckMailService.onQuit(self)
+            ImapCheckMailService.onQuit(self)
         finally:
             self.close()
         
@@ -78,7 +78,7 @@ class ExpressoService(CheckMailService):
         n.close()
         
     def processTip(self, subjects, tip):
-        tip = CheckMailService.processTip(self, subjects, tip)
+        tip = ImapCheckMailService.processTip(self, subjects, tip)
         return tip + '\n' + self.sync.getQuotaStr()
     
     def createImapConnection(self):
@@ -106,7 +106,7 @@ class ExpressoService(CheckMailService):
                 self.lastRefresh = now - self.ieRefreshTime
 
             # checks for new mail and notify the user as needed. May redefine refreshMinutes.
-            CheckMailService.runService(self, timered)
+            ImapCheckMailService.runService(self, timered)
 
             # verifica se o próximo refresh deve acontecer antes de passar 'refreshMinutes'
             nextrefresh = self.lastRefresh + self.ieRefreshTime

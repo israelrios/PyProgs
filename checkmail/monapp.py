@@ -11,7 +11,7 @@ from monitors import MonApp, curdir, MonLoginWindow, MonConfig
 class LoginWindow(MonLoginWindow):
     def readConfig(self):
         return Config(self.app)
-      
+
     def createCustom(self, mainbox):
         self.cbEmail = gtk.CheckButton("_CheckMail")
         self.cbEmail.show()
@@ -25,17 +25,17 @@ class LoginWindow(MonLoginWindow):
         self.cbExpresso = gtk.CheckButton("_Expresso")
         self.cbExpresso.show()
         self.cbExpresso.set_active(self.conf.expresso)
-        
+
         box = gtk.VBox(True, 5)
         box.pack_start(self.cbEmail, False, True, 0)
         box.pack_start(self.cbProxyUsage, False, True, 0)
         box.pack_start(self.cbSisCop, False, True, 0)
         box.pack_start(self.cbExpresso, False, True, 0)
-        
+
         box.show()
-        
+
         mainbox.pack_start(box, False, True, 0)
-        
+
     def doLogin(self, user, passwd):
         checkmail = self.cbEmail.get_active()
         proxyusage = self.cbProxyUsage.get_active()
@@ -44,7 +44,7 @@ class LoginWindow(MonLoginWindow):
         if not checkmail and not proxyusage and not siscopservice and not expressoservice:
             showMessage(u"You must select at least one service.", "Monitors", self)
             return False
-        
+
         self.app.configServices(checkmail, proxyusage, siscopservice, expressoservice)
         self.conf.checkmail = checkmail
         self.conf.proxyusage = proxyusage
@@ -60,7 +60,7 @@ class Config(MonConfig):
     proxyusage = True
     siscop = True
     expresso = True
-    
+
     def loadValues(self):
         MonConfig.loadValues(self)
         self.checkmail = self.readOption('services', 'checkmail', False)
@@ -87,15 +87,15 @@ class App(MonApp):
         MonApp.__init__(self)
         loginWindow = LoginWindow(self)
         loginWindow.run()
-        
+
     #Retorna True se a janela de login pode ser fechada
     def configServices(self, checkmail, proxyusage, siscopservice, expressoservice):
 
         self.clearServices();
-        
+
         if checkmail:
-            import checkmail
-            self.addService(checkmail.CheckMailService) #checkmail
+            import imapcheckmail
+            self.addService(imapcheckmail.ImapCheckMailService) #checkmail
         if proxyusage:
             import proxyusage
             self.addService(proxyusage.ProxyUsageService) #proxyusage

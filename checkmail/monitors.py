@@ -16,7 +16,7 @@ import tempfile
 import fcntl
 import gettext
 
-version = "1.12.2"
+version = "1.13.0"
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
@@ -172,7 +172,7 @@ class MonLoginWindow(gtk.Window):
         gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
 
         self.connect("delete-event", gtk.main_quit)
-        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
+        self.set_icon_from_file(os.path.join(curdir, app.iconFile or 'mail-unread.png'))
 
         self.conf = self.readConfig()
 
@@ -277,7 +277,7 @@ class MonLoginWindow(gtk.Window):
              
     def show(self):
         # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
-        self.set_icon_from_file(os.path.join(curdir, 'mail-unread.png'))
+        self.set_icon_from_file(os.path.join(curdir, self.app.iconFile or 'mail-unread.png'))
         gtk.Window.show(self)
 
     def run(self):
@@ -299,7 +299,7 @@ class MonLoginWindow(gtk.Window):
         try:
           if self.doLogin(user, passwd):
               self.conf.username = user
-              if self.cbSavePass.get_active() or self.cbAutoStart.get_active():
+              if self.cbSavePass.get_active():
                   self.conf.password = passwd
               else:
                   self.conf.password = ''
@@ -320,7 +320,7 @@ class MonConfig:
     def __init__(self, app):
         self.app = app
         self.home = os.getenv('USERPROFILE') or os.getenv('HOME')
-        self.filename = os.path.join(self.home, ".monitors.cfg")
+        self.filename = os.path.join(self.home, app.configFile)
         self.config = ConfigParser.ConfigParser()
         self.config.read(self.filename)
         self.username = self.readOption('login', 'username', '')
@@ -456,6 +456,8 @@ class MonApp:
         self.fdlock = None
         self.services = []
         self.name = 'Monitors'
+        self.iconFile = None
+        self.configFile = ".monitors.cfg"
         syslog.openlog('monitors')
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
