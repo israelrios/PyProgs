@@ -1,2 +1,7 @@
 *.pyc
 *~
+checkmail/deb/DEBIAN/control
+checkmail/deb/usr/share/locale
+debrepo/deb/db
+debrepo/deb/dists
+debrepo/deb/pool
