@@ -31,6 +31,7 @@ class GmailTrayIcon(CheckMailTrayIcon):
 class GmailService(CheckMailService):
     def __init__(self, app, user, passwd):
         CheckMailService.__init__(self, app, user, passwd)
+        self.refreshMinutes = 1.5
         self.newMailIcon = 'gmail-unread-large.png'
         auth_handler = urllib2.HTTPBasicAuthHandler()
         auth_handler.add_password(realm='New mail feed',
