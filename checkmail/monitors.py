@@ -452,13 +452,14 @@ class ServiceRunner:
 
 class MonApp:
 
-    def __init__(self):
+    def __init__(self, appid = 'monitors'):
         self.fdlock = None
         self.services = []
+        self.appid = appid
         self.name = 'Monitors'
         self.iconFile = None
-        self.configFile = ".monitors.cfg"
-        syslog.openlog('monitors')
+        self.configFile = "." + appid + ".cfg"
+        syslog.openlog(appid)
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
         self.tryAutoLogin = len(sys.argv) > 1 and '-auto' in sys.argv[1:]
@@ -560,7 +561,7 @@ class MonApp:
             
     #Creates the lock file
     def createLock(self, user):
-        lockfile = os.path.join(tempfile.gettempdir(), "monitors." + user + ".lock")
+        lockfile = os.path.join(tempfile.gettempdir(), self.appid + "." + user + ".lock")
         self.fdlock = os.open(lockfile, os.O_CREAT | os.O_RDWR)
         if self.fdlock == -1:
             self.lockError()

@@ -62,10 +62,9 @@ class GmailService(CheckMailService):
 if __name__ == '__main__':
     from monitors import MonApp, MonLoginWindow
 
-    app = MonApp()
+    app = MonApp('gmailchecker')
     app.name = 'Gmail Checker'
     app.iconFile = 'gmail-unread.png'
-    app.configFile = ".gmailchecker.cfg"
     app.desktopFile = 'gmail-auto.desktop'
     app.addService(GmailService)
     MonLoginWindow(app).run()
