@@ -84,7 +84,7 @@ class CheckMailService(Service):
         return tip # pode ser sobreescrito em classes que derivam desta
 
     def joinMsgSubjects(self, msgs):
-        return '* ' + '\n* '.join([msg[1] for msg in sorted(msgs)])
+        return '* ' + '\n* '.join([msg[1] for msg in sorted(msgs, reverse=True)])
 
     def setStatus(self, msgs, timered = False):
         #msgs = set com tuples no formato (id, subject)
