@@ -100,7 +100,7 @@ class ImapCheckMailService(checkmail.CheckMailService):
                     if isinstance(m, tuple) and m[0].find('SUBJECT') >= 0:
                         #Extrai o subject e decodifica o texto
                         localid = int(m[0][:m[0].index('(')])
-                        msgs.add((localid, decode_header(m[1].strip('Subject:').strip())))
+                        msgs.add((localid, decode_header(m[1][len('Subject:'):].strip())))
 
             self.iclient.close()
 
