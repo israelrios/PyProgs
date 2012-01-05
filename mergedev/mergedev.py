@@ -63,7 +63,7 @@ class MergeDevDialog(object):
                 self.gladexml.get_widget("MainWindow").hide()
                 gtk.main_quit()
         except Exception, e:
-            showMessage(e.message, "Validation Error", type = gtk.MESSAGE_ERROR)
+            showMessage(str(e), "Validation Error", type = gtk.MESSAGE_ERROR)
             
     def isValid(self):
         if self.branchName == None or self.branchName.strip() == "":
@@ -219,7 +219,7 @@ class MergeDev:
                                  "-j%s:%s" % (sourceBranch, sCommitDate),
                                  filename)
         except Exception, e:
-            console << kRed << "Exception running update(possible conflict in file): %s\n" % e.message
+            console << kRed << "Exception running update(possible conflict in file): %s\n" % str(e)
             return
         
         self.checkUpdateOutput(filename, code, out, err)
@@ -235,7 +235,7 @@ class MergeDev:
                                  "-j%s" % (rev),
                                  filename)
         except Exception, e:
-            console << kRed << "Exception running update(possible conflict in file): %s\n" % e.message
+            console << kRed << "Exception running update(possible conflict in file): %s\n" % str(e)
             return
         
         self.checkUpdateOutput(filename, code, out, err)
@@ -272,12 +272,12 @@ class MergeDev:
 
         # diffing using the calculated oldrev
         try:
-            code, out, err = self.cvsRun("diff", "-N", "-U", "2",
+            code, out, err = self.cvsRun("diff", "-N", "-U", "3",
                                  "-r%s" % (oldrev),
                                  "-r%s" % (rev),
                                  filename)
         except Exception, e:
-            console << kRed << "Exception running diff: %s\n" % e.message
+            console << kRed << "Exception running diff: %s\n" % str(e)
             return
         
         if not code in [0,1]:
@@ -308,6 +308,18 @@ class MergeDev:
                 return '1.0'
         return '.'.join(parts)
 
+    def getRepository(self):
+        repo = open('CVS/Repository', 'r')
+        rpath = repo.read().strip()
+        repo.close()
+        return rpath
+
+    def getRootPath(self):
+        rfile = open('CVS/Root', 'r')
+        rpath = rfile.read().strip().split(':')[-1]
+        rfile.close()
+        return rpath
+
     def procEntry(self, entry, developer, sourceBranch, sStartDate, sEndDate):
         console << kBlue <<"Querying changes in '%s' made by %s on %s between %s and %s...\n" % \
                 (entry.GetName(), developer, sourceBranch, sStartDate, sEndDate)
@@ -324,26 +336,32 @@ class MergeDev:
             optRev = '-b'
         else:
             optRev = "-r%s" % sourceBranch
-        code, out, err = self.cvsRun("log", "-S", "-N",
+
+        rpath = os.path.normpath(self.getRepository() + '/' + filename)
+        code, out, err = self.cvsRun("rlog", "-S", "-N",
                                  "-d%s<=%s" % (sStartDate, sEndDate),
                                  optRev, #TODO: when branch is HEAD the initial version may not be retrievied
                                  "-w%s" % developer,
-                                 filename)
+                                 rpath)
         if out == None:
             console << kRed <<"No changes were found in '%s'.\n" % entry.GetName()
             return
-        
+
+        fullrpath = os.path.normpath(self.getRootPath()) + '/' + os.path.normpath(self.getRepository()) + '/'
+
         lines= out.split("\n")
         filename = ""
         startParsing = False
+        fileMarker = 'RCS file:'
         patAll = re.compile(r"\n(RCS file:.*?)==================================", re.DOTALL | re.MULTILINE)
         patDate = re.compile(r"date:\s*(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2})\s*[\-+]\d{4};")
         for mo in patAll.finditer(out):
             filelog = mo.group(1).split('\n')
             lastline = 0
             for i in range(0, len(filelog)):
-                if filelog[i].startswith('Working file:'):
-                    filename = filelog[i][13:].strip()
+                if filelog[i].startswith(fileMarker):
+                    filename = filelog[i][len(fileMarker):].strip()[:-len(',v')]
+                    filename = filename[len(fullrpath):]
                     lastline = i 
                     break
             i = lastline + 6
@@ -351,7 +369,7 @@ class MergeDev:
             while i < len(filelog):
                 if filelog[i].startswith('----------------------'):
                     i += 1
-                    revs.append(filelog[i].lstrip('revision').strip())
+                    revs.append(filelog[i][len('revision'):].strip())
                     i += 1
                     #sDate = patDate.search(filelog[i]).group(1)
                     #self.mergeFileByDate(sourceBranch, filename, sDate)
@@ -404,7 +422,7 @@ class MergeDev:
             try:
                 self.procEntry(entry, developer, sourceBranch, sStartDate, sEndDate)
             except Exception, e:
-                console << kRed << e.message << '\n'
+                console << kRed << str(e) << '\n'
                 console << kNormal
                 return
         console << kGreen <<"End of merge.\n"
