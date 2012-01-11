@@ -59,10 +59,11 @@ class SisCopService(Service):
         self.refreshMinutes = 55 # não tem necessidade de estressar o servidor
         self.setIcon(self.check())
 
-    def showPage(self, pageId):
+    def showPage(self, pageId=None):
         """ Mostra a página do SisCop se o pageId for diferente do último. """
-        if pageId != self.lastPageId:
-            self.lastPageId = pageId
+        if pageId == None or pageId != self.lastPageId:
+            if pageId != None:
+                self.lastPageId = pageId
             #abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
             if 'chrome' in procs:
