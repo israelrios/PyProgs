@@ -9,24 +9,35 @@ import hashlib
 import zlib
 import cStringIO
 import time
-import progressbar
 import sys
 
 class ProgressBar(object):
     def __init__(self, limit):
-        self.pb = progressbar.ProgressBar(0, limit, mode='fixed')
+        self.limit = limit
+        self.pos = 0
         self.oldpb = None
+        self.make()
         self.show()
+
+    def make(self):
+        if self.limit == 0:
+            progress = 1
+        else:
+            progress = (self.pos / self.limit)
+        size = 77 # tamanho da barra
+        bar = "#" * int(size * progress)
+        self.pb = "[" + bar + " " * (size - len(bar)) + "] " + str(int(progress * 100)) + "%"
     
     def show(self):
-        spb = str(self.pb)
+        spb = self.pb
         if self.oldpb != spb:
             print spb, "\r",
             sys.stdout.flush()
             self.oldpb = spb
 
     def callback(self, data):
-        self.pb.increment_amount(len(data))
+        self.pos += len(data)
+        self.make()
         self.show()
 
     def clear(self):
