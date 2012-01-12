@@ -325,7 +325,7 @@ class FtpSync(object):
         with open(os.path.join(self.basepath,'ftpbkp.conf'), 'r') as f:
             conf = f.read().decode('utf8').strip().split('\n')
         self.repo = '/' + self.bkpdirname + '/' + conf[0].decode('utf8')
-        # get ignored patterns
+        # get excluded patterns
         self.excludes = ["*~"]
         for pattern in conf[1:]:
             if pattern.startswith('E'):
@@ -353,11 +353,12 @@ if len(sys.argv) < 2:
 userdir = os.getenv('USERPROFILE') or os.getenv('HOME')
 with open(os.path.join(userdir, '.ftpbkp.conf'), 'r') as f:
     conf = f.read().strip().split('\n')
+
 if len(conf) == 2:
     conf.append(getpass.getpass())
+
 sync = FtpSync(conf[0], conf[1], conf[2])
 try:
-    # o path deve estar em unicode
     sync.sync(sys.argv[1])
 except KeyboardInterrupt:
     sync.close()
