@@ -9,6 +9,29 @@ import hashlib
 import zlib
 import cStringIO
 import time
+import progressbar
+import sys
+
+class ProgressBar(object):
+    def __init__(self, limit):
+        self.pb = progressbar.ProgressBar(0, limit, mode='fixed')
+        self.oldpb = None
+        self.show()
+    
+    def show(self):
+        spb = str(self.pb)
+        if self.oldpb != spb:
+            print spb, "\r",
+            sys.stdout.flush()
+            self.oldpb = spb
+
+    def callback(self, data):
+        self.pb.increment_amount(len(data))
+        self.show()
+
+    def clear(self):
+        print ' ' * len(self.oldpb), "\r",
+        sys.stdout.flush()
 
 class FileInfo(object):
     def __init__(self, isdir, key=None, date=None):
@@ -51,13 +74,13 @@ class FtpSync(object):
             self.ftp.cwd(remotedir)
             self.curdir = remotedir
 
-    def filelist(self, dirname):
+    def filelist(self):
         lst = []
-        pathstart = len(dirname) + 1
-        for dirpath, dirs, files in os.walk(dirname):
+        pathstart = len(self.basepath) + 1
+        for dirpath, dirs, files in os.walk(self.basepath):
             for filename in files + dirs:
                 if filename != self.dirinfoname:
-                    lst.append(os.path.join(dirpath[pathstart:], filename))
+                    lst.append(os.path.join(dirpath[pathstart:], filename).decode(sys.getfilesystemencoding()))
         return lst
 
     def remotelist(self, path):
@@ -127,9 +150,10 @@ class FtpSync(object):
     def copyfile(self, filepath):
         (dirname, filename) = os.path.split(filepath)
         rdir = self.remotedir(dirname)
-        print filepath
+        print filepath.encode('utf8')
         dirinfo = self.getdirinfo(rdir)
-        with open(filepath, 'rb') as f:
+        fullpath = os.path.join(self.basepath, filepath)
+        with open(fullpath, 'rb') as f:
             data = f.read()
         # key computation
         key = hashlib.sha1()
@@ -147,27 +171,31 @@ class FtpSync(object):
         data = zlib.compress(data)
         self.store(filekey, data)
         # dirinfo
-        filedate = time.ctime(os.path.getmtime(filepath))
+        filedate = time.ctime(os.path.getmtime(fullpath))
         dirinfo[filename] = FileInfo(False, filekey, filedate)
         self.mustsavedirinfo = True
 
     def savedir(self, filepath):
         (dirname, filename) = os.path.split(filepath)
         rdir = self.remotedir(dirname)
-        print filepath
+        #print filepath.encode('utf8')
         dirinfo = self.getdirinfo(rdir)
         if filename in dirinfo:
             return
-        filedate = time.ctime(os.path.getmtime(filepath))
+        filedate = time.ctime(os.path.getmtime(os.path.join(self.basepath, filepath)))
         dirinfo[filename] = FileInfo(True, filename.encode('latin1').encode('quopri'), filedate)
         self.mustsavedirinfo = True
 
     def store(self, filename, data, binary=True):
         print "* Storing", filename.encode('utf8')
-        if binary:
-            self.ftp.storbinary('STOR ' + filename, cStringIO.StringIO(data))
-        else:
-            self.ftp.storlines('STOR ' + filename, cStringIO.StringIO(data))
+        pb = ProgressBar(len(data)-1)
+        try:
+            if binary:
+                self.ftp.storbinary('STOR ' + filename, cStringIO.StringIO(data), callback=pb.callback)
+            else:
+                self.ftp.storlines('STOR ' + filename, cStringIO.StringIO(data), callback=pb.callback)
+        finally:
+            pb.clear()
         if self.curdir in self.remotelistcache:
             self.remotelistcache[self.curdir].append(filename)
 
@@ -203,11 +231,12 @@ class FtpSync(object):
                     remove(filename, fileinfo, False)
         if removeAll:
             self.deletefile(self.dirinfoname, False)
-            del self.dirinfos[rdir]
+            if rdir in self.dirinfos:
+                del self.dirinfos[rdir]
         for fullpath in removedirs:
             self.checkdeleted(files, fullpath, True)
             filename = os.path.basename(fullpath)
-            fileinfo = dirinfo[os.path.basename(fullpath)]
+            fileinfo = dirinfo[filename]
             self.changedir(rdir)
             remove(filename, fileinfo, True)
 
@@ -215,16 +244,21 @@ class FtpSync(object):
         for filepath in files:
             parent = os.path.dirname(filepath)
             self.checkdeleted(files, parent)
-            if os.path.isdir(filepath):
+            if os.path.isdir(os.path.join(self.basepath, filepath)):
                 self.savedir(filepath)
             else:
                 self.copyfile(filepath)
         if self.mustsavedirinfo:
             self.savedirinfo(self.curdir)
 
-    def sync(self, dirname, repo):
-        self.repo = '/' + self.bkpdirname + '/' + repo
-        files = self.filelist(dirname)
+    def sync(self, dirname):
+        self.basepath = os.path.normpath(os.path.abspath(dirname))
+        print "** Backuping", self.basepath
+        with open(os.path.join(self.basepath,'ftpbkp.conf'), 'r') as f:
+            conf = f.read().strip().split('\n')
+        self.repo = '/' + self.bkpdirname + '/' + conf[0].decode('utf8')
+
+        files = self.filelist()
         #if len(files) == 0:
         #    self.checkdeleted(files, '', True)
         #else:
@@ -235,9 +269,18 @@ class FtpSync(object):
             self.savedirinfo(self.curdir)
         self.ftp.quit()
 
-sync = FtpSync(getpass.getpass())
+if len(sys.argv) < 2:
+    print "Use:", sys.argv[0], "<dir>"
+    sys.exit(1)
+
+userdir = os.getenv('USERPROFILE') or os.getenv('HOME')
+with open(os.path.join(userdir, '.ftpbkp.conf'), 'r') as f:
+    conf = f.read().strip().split('\n')
+if len(conf) == 2:
+    conf.append(getpass.getpass())
+sync = FtpSync(conf[0], conf[1], conf[2])
 try:
     # o path deve estar em unicode
-    sync.sync(u'.', u'python')
+    sync.sync(sys.argv[1])
 except KeyboardInterrupt:
     sync.close()
