@@ -11,6 +11,7 @@ import cStringIO
 import time
 import sys
 import urllib
+import fnmatch
 
 class ProgressBar(object):
     def __init__(self, limit):
@@ -107,14 +108,34 @@ class FtpSync(object):
             self.ftp.cwd(remotedir)
             self.curdir = remotedir
 
+    def isexcluded(self, filepath):
+        """ Returns True when some ignored pattern matches filepath. """
+        if os.path.basename(filepath) == self.dirinfoname:
+            return True
+        for pat in self.excludes:
+            if fnmatch.fnmatch(filepath, pat):
+                return True
+        return False
+
     def filelist(self):
         lst = []
-        pathstart = len(self.basepath) + 1
-        for dirpath, dirs, files in os.walk(self.basepath):
-            for filename in files:
-                if filename != self.dirinfoname:
-                    lst.append(os.path.join(dirpath[pathstart:], filename).decode(sys.getfilesystemencoding()))
+        fsenc = sys.getfilesystemencoding()
+        self.filelistrec(lst, "", fsenc)
         return lst
+
+    def filelistrec(self, lst, dirpath, fsenc):
+        dirs = []
+        files = []
+        for fname in os.listdir(os.path.join(self.basepath, dirpath)):
+            filepath = os.path.join(dirpath, fname.decode(fsenc))
+            if not self.isexcluded(filepath):
+                if os.path.isdir(os.path.join(self.basepath, filepath)):
+                    dirs.append(filepath)
+                else:
+                    files.append(filepath)
+        lst.extend(sorted(files))
+        for filepath in dirs:
+            self.filelistrec(lst, filepath, fsenc)
 
     def remotelist(self, path):
         if path in self.remotelistcache:
@@ -221,12 +242,13 @@ class FtpSync(object):
                     lines = localdirinfo.strip().split('\n')
                     dirinfo = DirInfo()
                     if dirinfo.parse(lines[1:]):
+                        dirinfo.updcount = 1 # pra forçar a salvar
                         self.localdirinfos[lines[0]] = dirinfo
 
     def copyfile(self, filepath):
         rdir = self.baserdir
-        print filepath.encode('utf8')
         dirinfo = self.getdirinfo(rdir)
+        print filepath.encode('utf8')
         fullpath = os.path.join(self.basepath, filepath)
         with open(fullpath, 'rb') as f:
             data = f.read()
@@ -237,7 +259,7 @@ class FtpSync(object):
 
         if filepath in dirinfo:
             oldkey = dirinfo[filepath].key
-            if oldkey == filekey: # same key?
+            if oldkey == filekey and filekey in self.remotelist(rdir): # same key?
                 return
             self.deleterefcount(filepath)
 
@@ -296,22 +318,26 @@ class FtpSync(object):
     def copyfiles(self, files):
         for filepath in files:
             self.copyfile(filepath)
-        self.savedirinfo(self.curdir)
 
     def sync(self, dirname):
         self.basepath = os.path.normpath(os.path.abspath(dirname))
-        print "** Backuping", self.basepath
+        print "** Backing up", self.basepath
         with open(os.path.join(self.basepath,'ftpbkp.conf'), 'r') as f:
-            conf = f.read().strip().split('\n')
+            conf = f.read().decode('utf8').strip().split('\n')
         self.repo = '/' + self.bkpdirname + '/' + conf[0].decode('utf8')
+        # get ignored patterns
+        self.excludes = ["*~"]
+        for pattern in conf[1:]:
+            if pattern.startswith('E'):
+                self.excludes.append(pattern[1:])
 
         files = self.filelist()
         self.baserdir = self.remotedir('')
-        self.checkdeleted(files, '')
-        #if len(files) == 0:
-        #    self.checkdeleted(files, '', True)
-        #else:
         self.copyfiles(files)
+        self.checkdeleted(files, '')
+        self.savedirinfo(self.curdir)
+
+        print "** Done"
 
     def close(self):
         try:
