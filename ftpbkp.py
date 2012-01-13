@@ -208,10 +208,8 @@ class FtpSync(object):
         if self.dirinfoname in self.remotelist(remotedir):
             self.changedir(remotedir)
             filedata = []
-            def newdata(data):
-                filedata.append(data)
             print "* Reading", self.dirinfoname
-            self.ftp.retrbinary('RETR ' + self.dirinfoname, newdata)
+            self.ftp.retrbinary('RETR ' + self.dirinfoname, filedata.append)
             dirinfo = DirInfo()
             lines = zlib.decompress(''.join(filedata)).decode('utf8').rstrip().split('\n')
             if not dirinfo.parse(lines):
