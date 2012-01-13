@@ -13,10 +13,38 @@ import sys
 import urllib
 import fnmatch
 
+class Ftp(ftplib.FTP):
+    # copiado do original para incluir o parâmetro rest
+    def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
+        """Store a file in binary mode.  A new port is created for you.
+
+        Args:
+          cmd: A STOR command.
+          fp: A file-like object with a read(num_bytes) method.
+          blocksize: The maximum data size to read from fp and send over
+                     the connection at once.  [default: 8192]
+          callback: An optional single parameter callable that is called on
+                    on each block of data after it is sent.  [default: None]
+
+        Returns:
+          The response code.
+        """
+        self.voidcmd('TYPE I')
+        conn = self.transfercmd(cmd, rest)
+        try:
+            while 1:
+                buf = fp.read(blocksize)
+                if not buf: break
+                conn.sendall(buf)
+                if callback: callback(buf)
+        finally:
+            conn.close()
+        return self.voidresp()
+
 class ProgressBar(object):
-    def __init__(self, limit):
+    def __init__(self, limit, pos=0):
         self.limit = limit
-        self.pos = 0
+        self.pos = pos
         self.oldpb = None
         self.make()
         self.show()
@@ -46,9 +74,10 @@ class ProgressBar(object):
         sys.stdout.flush()
 
 class FileInfo(object):
-    def __init__(self, key=None, date=None):
+    def __init__(self, key=None, date=None, size=None):
         self.key = key
         self.date = date
+        self.size = size
 
 class DirInfo(dict):
     def __init__(self, version = 1, generated = time.time()):
@@ -65,8 +94,8 @@ class DirInfo(dict):
         for line in lines[2:]:
             if line == 'ok':
                 return True
-            (filename, key, date) = line.split(';')
-            self[filename] = FileInfo(key, date)
+            (filename, key, date, size) = line.split(';')
+            self[filename] = FileInfo(key, date, size)
         return False
 
     def refcount(self, filekey):
@@ -81,7 +110,7 @@ class DirInfo(dict):
         # linha 1: data de geração
         lines = ['1', time.ctime()]
         for filename, fileinfo in self.items():
-            lines.append(';'.join([filename, fileinfo.key, fileinfo.date]))
+            lines.append(';'.join([filename, fileinfo.key, fileinfo.date, str(fileinfo.size)]))
         lines.append('ok')
         return '\n'.join(lines).encode('utf8')
 
@@ -91,7 +120,7 @@ class FtpSync(object):
     dirinfoname = "dirinfo__.bkp"
     def __init__(self, server, username, passwd):
         object.__init__(self)
-        self.ftp = ftplib.FTP(server, username, passwd)
+        self.ftp = Ftp(server, username, passwd)
         self.curdir = '/'
         self.server = server
         self.username = username
@@ -119,15 +148,17 @@ class FtpSync(object):
 
     def filelist(self):
         lst = []
-        fsenc = sys.getfilesystemencoding()
-        self.filelistrec(lst, "", fsenc)
+        # o path deve ser unicode
+        self.filelistrec(lst, u"")
         return lst
 
-    def filelistrec(self, lst, dirpath, fsenc):
+    def filelistrec(self, lst, dirpath):
         dirs = []
         files = []
         for fname in os.listdir(os.path.join(self.basepath, dirpath)):
-            filepath = os.path.join(dirpath, fname.decode(fsenc))
+            if fname in ['.', '..']:
+                continue
+            filepath = os.path.join(dirpath, fname)
             if not self.isexcluded(filepath):
                 if os.path.isdir(os.path.join(self.basepath, filepath)):
                     dirs.append(filepath)
@@ -135,7 +166,7 @@ class FtpSync(object):
                     files.append(filepath)
         lst.extend(sorted(files))
         for filepath in dirs:
-            self.filelistrec(lst, filepath, fsenc)
+            self.filelistrec(lst, filepath)
 
     def remotelist(self, path):
         if path in self.remotelistcache:
@@ -176,12 +207,13 @@ class FtpSync(object):
         dirinfo = None
         if self.dirinfoname in self.remotelist(remotedir):
             self.changedir(remotedir)
-            lines = []
-            def newline(line):
-                lines.append(line.decode('utf8'))
+            filedata = []
+            def newdata(data):
+                filedata.append(data)
             print "* Reading", self.dirinfoname
-            self.ftp.retrlines('RETR ' + self.dirinfoname, newline)
+            self.ftp.retrbinary('RETR ' + self.dirinfoname, newdata)
             dirinfo = DirInfo()
+            lines = zlib.decompress(''.join(filedata)).decode('utf8').rstrip().split('\n')
             if not dirinfo.parse(lines):
                 dirinfo = None
         if remotedir in self.localdirinfos:
@@ -200,7 +232,7 @@ class FtpSync(object):
         if dirinfo.updcount == 0:
             return
         self.changedir(remotedir)
-        self.store(self.dirinfoname, dirinfo.format(), binary=False)
+        self.store(self.dirinfoname, zlib.compress(dirinfo.format()))
         dirinfo.updcount = 0
         if remotedir in self.localdirinfos:
             del self.localdirinfos[remotedir]
@@ -215,7 +247,7 @@ class FtpSync(object):
             self.savedirinfo(self.curdir)
 
     def makelocaldirinfopath(self):
-        return os.path.join(userdir, 'ftpbkp', self.server + "@" + self.username + ".dirinfo")
+        return os.path.join(userdir, '.ftpbkp', self.server + "@" + self.username + ".dirinfo")
 
     def savelocaldirinfos(self):
         lines = []
@@ -242,7 +274,7 @@ class FtpSync(object):
                     lines = localdirinfo.strip().split('\n')
                     dirinfo = DirInfo()
                     if dirinfo.parse(lines[1:]):
-                        dirinfo.updcount = 1 # pra forçar a salvar
+                        dirinfo.updcount = 9 # pra forçar a salvar
                         self.localdirinfos[lines[0]] = dirinfo
 
     def copyfile(self, filepath):
@@ -263,22 +295,31 @@ class FtpSync(object):
                 return
             self.deleterefcount(filepath)
 
+        # sempre compacta mesmo se não for enviar pra poder calcular o tamanho
+        data = zlib.compress(data)
         if dirinfo.refcount(filekey) == 0 or not filekey in self.remotelist(rdir):
-            data = zlib.compress(data)
-            self.store(filekey, data)
+            rest = None
+            if filekey in self.remotelist(rdir):
+                print "* Requesting file size", filekey
+                rest = self.ftp.size(filekey)
+            if rest == None or rest != len(data):
+                self.store(filekey, data, rest=rest)
         # dirinfo
         filedate = time.ctime(os.path.getmtime(fullpath))
-        dirinfo[filepath] = FileInfo(filekey, filedate)
+        dirinfo[filepath] = FileInfo(filekey, filedate, len(data))
         self.dirinfoupdated()
 
-    def store(self, filename, data, binary=True):
+    def store(self, filename, data, binary=True, rest=None):
         print "* Storing", filename.encode('utf8')
-        pb = ProgressBar(len(data)-1)
+        pb = ProgressBar(len(data)-1, rest or 0)
+        filedata = cStringIO.StringIO(data)
+        filedata.seek(rest or 0)
         try:
             if binary:
-                self.ftp.storbinary('STOR ' + filename, cStringIO.StringIO(data), callback=pb.callback)
+                self.ftp.storbinary('STOR ' + filename, filedata, callback=pb.callback, rest=rest)
             else:
-                self.ftp.storlines('STOR ' + filename, cStringIO.StringIO(data), callback=pb.callback)
+                filedata.seek(0) # storlines ainda não aceita rest
+                self.ftp.storlines('STOR ' + filename, filedata, callback=pb.callback)
         finally:
             pb.clear()
         if self.curdir in self.remotelistcache:
@@ -320,8 +361,8 @@ class FtpSync(object):
             self.copyfile(filepath)
 
     def sync(self, dirname):
-        self.basepath = os.path.normpath(os.path.abspath(dirname))
-        print "** Backing up", self.basepath
+        self.basepath = os.path.normpath(os.path.abspath(dirname)).decode(sys.getfilesystemencoding())
+        print "** Backing up", self.basepath.encode('utf8')
         with open(os.path.join(self.basepath,'ftpbkp.conf'), 'r') as f:
             conf = f.read().decode('utf8').strip().split('\n')
         self.repo = '/' + self.bkpdirname + '/' + conf[0].decode('utf8')
