@@ -3,7 +3,7 @@
 # Autor: Israel Rios
 # Created: 16-jan-2012
 import os
-import sys
+import threading
 
 SIZE_G = 1024*1024*1024
 SIZE_M = 1024*1024
@@ -35,18 +35,28 @@ class Dir(object):
         print self.path.encode('latin1'), "." * (100 - len(self.path)), formatBytes(self.size)
 
 class DiskUsage(object):
+    def __init__(self):
+        self.evstop = threading.Event()
+
     def filelist(self):
         # o path deve ser unicode
         self.dir = self.filelistrec(self.basepath)
         return self.dir
 
+    def stopped(self):
+        return self.evstop.is_set()
+
     def filelistrec(self, dirpath):
         d = Dir(dirpath)
+        if self.stopped():
+            return d
         dirs = []
         try:
             for fname in os.listdir(dirpath):
                 if fname in ['.', '..']:
                     continue
+                if self.stopped():
+                    return d
                 filepath = os.path.join(dirpath, fname)
                 if os.path.isdir(filepath):
                     dirs.append(filepath)
@@ -65,8 +75,11 @@ class DiskUsage(object):
         return d
 
     def analise(self, dirname):
-        self.basepath = os.path.normpath(os.path.abspath(dirname)).decode(sys.getfilesystemencoding())
+        self.basepath = os.path.normpath(os.path.abspath(dirname))
         self.filelist()
+
+    def stop(self):
+        self.evstop.set()
 
 class DirNav(object):
     def __init__(self, dir):
@@ -110,11 +123,12 @@ class DirNav(object):
             i += 1
             d.show()
 
-if len(sys.argv) < 2:
-    print "Use:", sys.argv[0], "<dir>"
-    sys.exit(1)
-
-du = DiskUsage()
-du.analise(sys.argv[1])
-nav = DirNav(du.dir)
-nav.run()
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print "Use:", sys.argv[0], "<dir>"
+        sys.exit(1)
+    du = DiskUsage()
+    du.analise(sys.argv[1].decode(sys.getfilesystemencoding()))
+    nav = DirNav(du.dir)
+    nav.run()
