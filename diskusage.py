@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 # Autor: Israel Rios
-# Created: 11-jun-2012
+# Created: 16-jan-2012
 import os
 import sys
 
