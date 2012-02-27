@@ -85,7 +85,7 @@ class Client(object):
   def __init__(self):
     pass
 
-  def go(self, base_url, mirrored_url, rdata, rheaders):
+  def go(self, base_url, mirrored_url, rdata, rheaders_orig):
     """Fetch a page.
     
     Args:
@@ -104,10 +104,14 @@ class Client(object):
       return False
 
     try:
-      rheaders = dict(rheaders)
-      for header in ['Referer', 'Content-Length', 'Connection', 'Proxy-Connection', 'Keep-Alive', 'Host']:
-        if header in rheaders:
-          del rheaders[header]
+      rheaders = dict()
+
+      for key in rheaders_orig.keys():
+        if not key in ['Referer', 'Content-Length', 'Connection', 'Proxy-Connection', 'Keep-Alive', 'Host']:
+          rheaders[key] = rheaders_orig.get(key, "")
+
+      logging.debug(str(rheaders))
+
       if rdata != None and len(rdata) > 0:
         logging.debug('Doing Post...')
         self.response = urlfetch.fetch(mirrored_url, payload=rdata, method=urlfetch.POST, headers=rheaders, follow_redirects=False, deadline=10)
