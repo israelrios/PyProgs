@@ -8,6 +8,7 @@ from checkmail import CheckMailService, CheckMailTrayIcon
 import urllib2
 import xml.dom.minidom
 import webbrowser
+import datetime
 
 urlGmailInbox = "https://mail.google.com/mail/#inbox"
 urlGmailAtom = "https://mail.google.com/mail/feed/atom"
@@ -54,7 +55,10 @@ class GmailService(CheckMailService):
         for entry in entrys:
             subject = getText(entry.getElementsByTagName("title"))
             id = getText(entry.getElementsByTagName("id"))
-            msgs.add((id, subject))
+            date = getText(entry.getElementsByTagName("issued"))
+            # filter old messages
+            if datetime.datetime.strptime(date, "%Y-%m-%dT%H:%M:%SZ") > datetime.datetime(2012,01,01):
+                msgs.add((id, subject))
         return msgs
 
 ########################################
