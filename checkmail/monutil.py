@@ -79,11 +79,11 @@ class MultipartPostHandler(urllib2.BaseHandler):
             v_files = []
             v_vars = []
             try:
-                 for(key, value) in data.items():
-                     if hasattr(value, 'read'):
-                         v_files.append((key, value))
-                     else:
-                         v_vars.append((key, value))
+                for(key, value) in data.items():
+                    if hasattr(value, 'read'):
+                        v_files.append((key, value))
+                    else:
+                        v_vars.append((key, value))
             except TypeError, e:
                 raise TypeError("not a valid non-string sequence or mapping object: " + str(e))
 
@@ -93,21 +93,21 @@ class MultipartPostHandler(urllib2.BaseHandler):
                 boundary, data = self.multipart_encode(v_vars, v_files)
                 contenttype = 'multipart/form-data; boundary=%s' % boundary
                 if request.has_header('Content-Type') and request.get_header('Content-Type').find('multipart/form-data') != 0:
-                    log( "Replacing %s with %s" % (request.get_header('content-type'), 'multipart/form-data') )
+                    print ("Replacing %s with %s" % (request.get_header('content-type'), 'multipart/form-data'))
                 request.add_unredirected_header('Content-Type', contenttype)
 
             request.add_data(data)
         return request
 
-    def multipart_encode(self, vars, files, boundary = None, buffer = None):
+    def multipart_encode(self, params, files, boundary = None, body = None):
         if boundary is None:
             boundary = mimetools.choose_boundary()
-        if buffer is None:
-            buffer = ''
-        for(key, value) in vars:
-            buffer += '--%s\r\n' % boundary
-            buffer += 'Content-Disposition: form-data; name="%s"' % key
-            buffer += '\r\n\r\n' + str(value) + '\r\n'
+        if body is None:
+            body = ''
+        for(key, value) in params:
+            body += '--%s\r\n' % boundary
+            body += 'Content-Disposition: form-data; name="%s"' % key
+            body += '\r\n\r\n' + str(value) + '\r\n'
         for(key, fd) in files:
             fd.seek(0, os.SEEK_END)
             file_size = fd.tell()
@@ -116,14 +116,14 @@ class MultipartPostHandler(urllib2.BaseHandler):
             else:
                 filename = 'inputfile'
             contenttype = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
-            buffer += '--%s\r\n' % boundary
-            buffer += 'Content-Disposition: form-data; name="%s"; filename="%s"\r\n' % (key, filename)
-            buffer += 'Content-Type: %s\r\n' % contenttype
-            buffer += 'Content-Length: %s\r\n' % file_size
+            body += '--%s\r\n' % boundary
+            body += 'Content-Disposition: form-data; name="%s"; filename="%s"\r\n' % (key, filename)
+            body += 'Content-Type: %s\r\n' % contenttype
+            body += 'Content-Length: %s\r\n' % file_size
             fd.seek(0, os.SEEK_SET)
-            buffer += '\r\n' + fd.read() + '\r\n'
-        buffer += '--%s--\r\n\r\n' % boundary
-        return boundary, buffer
+            body += '\r\n' + fd.read() + '\r\n'
+        body += '--%s--\r\n\r\n' % boundary
+        return boundary, body
 
     https_request = http_request
 # end
