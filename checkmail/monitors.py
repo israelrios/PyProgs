@@ -67,8 +67,8 @@ class TrayIcon(gtk.StatusIcon):
         self.set_visible(False)
 
 
-def showMessage(text, caption, parentWindow = None, type = gtk.MESSAGE_INFO):
-    dlg = gtk.MessageDialog(parentWindow, gtk.DIALOG_MODAL, type, gtk.BUTTONS_OK, text)
+def showMessage(text, caption, parentWindow = None, mtype = gtk.MESSAGE_INFO):
+    dlg = gtk.MessageDialog(parentWindow, gtk.DIALOG_MODAL, mtype, gtk.BUTTONS_OK, text)
     #dlg.set_markup(text)
     dlg.set_title(caption)
     dlg.run()
@@ -297,17 +297,17 @@ class MonLoginWindow(gtk.Window):
                 showMessage(_(u"Username and password are required."), self.app.name, self)
             return False
         try:
-          if self.doLogin(user, passwd):
-              self.conf.username = user
-              if self.cbSavePass.get_active():
-                  self.conf.password = passwd
-              else:
-                  self.conf.password = ''
-              self.conf.setAutoStartEnabled(self.cbAutoStart.get_active())
-              self.conf.save()
-              self.app.startServices()
-              self.destroy()
-              return True
+            if self.doLogin(user, passwd):
+                self.conf.username = user
+                if self.cbSavePass.get_active():
+                    self.conf.password = passwd
+                else:
+                    self.conf.password = ''
+                self.conf.setAutoStartEnabled(self.cbAutoStart.get_active())
+                self.conf.save()
+                self.app.startServices()
+                self.destroy()
+                return True
         except Exception, e:
             showMessage(str(e), _("Error"), self)
         return False
@@ -391,12 +391,12 @@ class MonConfig:
                 source = os.path.join(curdir, source)
             f = open(source, 'r')
             try:
-              content = f.read()
-              f.close()
-              f = open(autofile, 'w')
-              f.write(content)
+                content = f.read()
+                f.close()
+                f = open(autofile, 'w')
+                f.write(content)
             finally:
-              f.close()
+                f.close()
         else:
             os.remove(autofile)
 
