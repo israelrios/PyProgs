@@ -54,13 +54,13 @@ class CheckMailService(Service):
         n.set_timeout(10000) # 10 segundos
         n.attach_to_status_icon(self.getTrayIcon())
         if "actions" in self.notifyCaps:
-          loop = gobject.MainLoop ()
-          n.connect('closed', lambda sender: loop.quit())
-          n.add_action("default", _("Open Mail"), self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
-          n.show()
-          loop.run() #sem o loop não funciona a action da notificação
+            loop = gobject.MainLoop ()
+            n.connect('closed', lambda sender: loop.quit())
+            n.add_action("default", _("Open Mail"), self.onNotifyClick) # isso faz exibir uma dialog box nas novas versões do ubuntu
+            n.show()
+            loop.run() #sem o loop não funciona a action da notificação
         else:
-          n.show()
+            n.show()
         return False # pra não rodar novamente no caso de ser chamada por idle_add
 
     def onNotifyClick(self, n, action):
