@@ -4,7 +4,7 @@
 # Created: 23-jan-2009
 import gtk
 
-from monitors import MonApp, curdir, MonLoginWindow, MonConfig
+from monitors import MonApp, MonLoginWindow, MonConfig, showMessage
 
 #####################################################
 # MonLoginWindow
