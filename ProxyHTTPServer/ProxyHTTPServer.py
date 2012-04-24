@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 import BaseHTTPServer, httplib, SocketServer, urllib
 import re
+import socket
+import select
 
 class ProxyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    rbufsize = 0
 
     def doCommon(self):    
         req = Request(self)
@@ -12,20 +15,65 @@ class ProxyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         res = req.getResponse()
         res.delHeader("transfer-encoding")
         res.toClient()
-    
+
+    def _connect_to(self, netloc, soc):
+        i = netloc.find(':')
+        if i >= 0:
+            host_port = netloc[:i], int(netloc[i+1:])
+        else:
+            host_port = netloc, 80
+        print "\t" "connect to %s:%d" % host_port
+        try: soc.connect(host_port)
+        except socket.error, arg:
+            try: msg = arg[1]
+            except: msg = arg
+            self.send_error(404, msg)
+            return 0
+        return 1
+
     def do_CONNECT(self):
-        #TODO: CONNECT is not working yet
-    	req = Request(self)
-    	req.doConnect()
-    	res = req.getResponse()
-    	res.delHeader("transfer-encoding")
-        res.toClient()
-        
+        return # not working yet
+        soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            if self._connect_to(self.path, soc):
+                self.log_request(200)
+                self.wfile.write(self.protocol_version +
+                                 " 200 Connection established\r\n")
+                self.wfile.write("Proxy-agent: %s\r\n" % self.version_string())
+                self.wfile.write("\r\n")
+                self._read_write(soc, 300)
+        finally:
+            print "\t" "bye"
+            soc.close()
+            self.connection.close()
+    
     def do_GET(self):
         self.doCommon()
 
     def do_POST(self):
         self.doCommon()
+
+    def _read_write(self, soc, max_idling=20):
+        iw = [self.connection, soc]
+        ow = []
+        count = 0
+        while 1:
+            count += 1
+            (ins, _, exs) = select.select(iw, ow, iw, 3)
+            if exs: break
+            if ins:
+                for i in ins:
+                    if i is soc:
+                        out = self.connection
+                    else:
+                        out = soc
+                    data = i.recv(8192)
+                    if data:
+                        out.send(data)
+                        count = 0
+            else:
+                print "\t" "idle", count
+            if count == max_idling: break
         
     do_HEAD = do_GET
     do_POST = do_GET
@@ -47,22 +95,6 @@ class Request:
                 int(self.proxy.headers.getheader("content-length")) )
         else:
             self.body = None
-    
-    def doConnect(self):
-#    	soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#        try:
-#            if self._connect_to(self.path, soc):
-#                self.proxy.log_request(200)
-#                self.proxy.wfile.write(self.proxy.protocol_version +
-#                                 " 200 Connection established\r\n")
-#                self.proxy.wfile.write("Proxy-agent: %s\r\n" % self.proxy.version_string())
-#                self.proxy.wfile.write("\r\n")
-#                self._read_write(soc, 300)
-#        finally:
-#            print "\t" "bye"
-#            soc.close()
-#            self.connection.close()
-        pass
     
     def encodedPath(self):
         url = self.path.replace('.', "u--v")
