@@ -3,7 +3,7 @@
 # Autor: Israel Rios
 # Created: 17-nov-2009
 
-import imap4utf7 # pro codec imap4-utf-7
+import imap4utf7 # pro codec imap4-utf-7 @UnusedImport
 
 from monutil import decode_header, MultipartPostHandler
 
@@ -26,7 +26,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import email.utils
 import email.header
-from email.parser import Parser as EmailParser
 from email.generator import Generator as EmailGenerator
 
 import imaplib
@@ -346,7 +345,7 @@ def makeEmailDesc(person):
 class ExpressoMessage:
     def checkFlag(self, flag):
         if isinstance(flag, bool):
-          return flag
+            return flag
         return flag.strip() != ''
 
     def __init__(self, values):
@@ -561,8 +560,8 @@ class ExpressoManager:
         # as pastas vem indexadas de 0 até n em data
         i = 0
         while i in data:
-          folders.add(data[i]['folder_id'])
-          i += 1
+            folders.add(data[i]['folder_id'])
+            i += 1
         # os outros 3 parâmetros são 'quota_limit', 'quota_percent', 'quota_used'
         self.quota = data['quota_percent']
         self.quotaLimit = data['quota_limit']
@@ -677,8 +676,8 @@ class ExpressoManager:
         # as mensagens vem identificadas por um número (sequêncial) no dict da resposta
         i = 0
         while i in data:
-          msgs.append(ExpressoMessage(data[i]))
-          i += 1
+            msgs.append(ExpressoMessage(data[i]))
+            i += 1
 
         return msgs
 
@@ -1549,5 +1548,3 @@ if __name__ == "__main__":
         pass
     except IExpressoError, e:
         log( "*** Error:", str(e) )
-
-
