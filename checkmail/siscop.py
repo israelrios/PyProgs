@@ -76,7 +76,6 @@ class SisCopService(Service):
         #verifica se o usuário está na máquina
         bus = dbus.SessionBus()
         ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
-        mustShowPage = not ssaver.GetActive()
         try:
             ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
         except:
@@ -167,15 +166,15 @@ class SisCopService(Service):
         periodFound = False
         strPeriod = str(period) + u'º Período'
         if entrance:
-            type = u'Entrada'
+            desc = u'Entrada'
         else:
-            type = u'Saída'
+            desc = u'Saída'
         for line in text.split('\n'):
             line = line.strip()
             if line != '':
                 if line.startswith(strPeriod):
                     periodFound = True
-                if periodFound and  line.startswith(type):
+                if periodFound and line.startswith(desc):
                     try:
                         parts = line.split('-')
                         if len(parts) < 2:

@@ -4,7 +4,7 @@
 # Created: 03-jan-2012
 
 import os
-from imaplib import IMAP4, IMAP4_SSL
+from imaplib import IMAP4_SSL
 import checkmail
 import threading
 from monutil import decode_header, execute
