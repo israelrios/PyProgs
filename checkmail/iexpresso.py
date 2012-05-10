@@ -589,6 +589,11 @@ class ExpressoManager:
             return None
         try:
             url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
+        except urllib2.HTTPError, e:
+            # handling errors from expresso when exporting messages, only to small lists
+            if (e.code == 404) and (msgsid.count(',') < 2):
+                return None
+            raise
         except:
             log( "Error downloading full messages.", "   idx_file:", idx_file )
             raise
@@ -904,13 +909,13 @@ class MailSynchronizer():
         self.user = user
         self.password = password
         self.checkPreConditions()
-        self.loginExpresso()
+        self.createExpressoManager()
         self.curday = 0
         self.loginLocal()
         self.db = self.loadDb()
         self.smartFolders = None
 
-    def loginExpresso(self):
+    def createExpressoManager(self):
         self.es = ExpressoManager(self.user, self.password)
 
     def close(self):
@@ -1154,7 +1159,7 @@ class MailSynchronizer():
         compressLog()
         log( '* Full refresh -', time.asctime() )
         try:
-            self.loginExpresso() # full refresh does a relogin to avoid problems with dirty sessions
+            self.createExpressoManager() # full refresh does a relogin to avoid problems with dirty sessions
             localdb = self.initUpdate()
 
             try:
