@@ -87,16 +87,16 @@ def decode_htmlentities(string):
     return entity_re.subn(substitute_entity, string)[0]
 
 # Portei este código do arquivo connector.js do expresso.
-def matchBracket(str, iniPos):
+def matchBracket(text, iniPos):
     nClose = iniPos
     while True:
-        nOpen = str.find('{', nClose+1)
-        nClose = str.find('}', nClose+1)
+        nOpen = text.find('{', nClose+1)
+        nClose = text.find('}', nClose+1)
         if (nOpen == -1):
             return nClose
 
         if (nOpen < nClose ):
-            nClose = matchBracket(str, nOpen)
+            nClose = matchBracket(text, nOpen)
 
         if (nOpen >= nClose):
             return nClose
@@ -106,14 +106,14 @@ def matchBracket(str, iniPos):
 # Formato:
 #   a:n:{s:n:"";i:k;};
 #   Saída: dicionário com os valores
-def unserialize(str):
-    type = str[0]
-    if type == 'a':
-        n = int( str[str.index(':')+1 : str.index(':',2)] )
-        arrayContent = str[str.index('{')+1 : str.rindex('}')]
+def unserialize(text):
+    itemtype = text[0]
+    if itemtype == 'a':
+        n = int( text[text.index(':')+1 : text.index(':',2)] )
+        arrayContent = text[text.index('{')+1 : text.rindex('}')]
 
         data = {}
-        for i in range(n):
+        for _ in range(n):
             pos = 0
 
             #/* Process Index */
@@ -143,23 +143,23 @@ def unserialize(str):
                 data[index] = unserialize(part)
             arrayContent = arrayContent[pos:]
 
-    elif type == 's':
-        pos = str.index(':', 2)
-        val = int(str[2 : pos])
-        data = str[pos+2 : pos + 2 + val]
-        #str = str[pos + 4 + val : ]
+    elif itemtype == 's':
+        pos = text.index(':', 2)
+        val = int(text[2 : pos])
+        data = text[pos+2 : pos + 2 + val]
+        #text = text[pos + 4 + val : ]
 
-    elif type == 'i' or type == 'd':
-        pos = str.index(';')
-        data = int(str[2  : pos])
-        #str = str[pos + 1 : ]
+    elif itemtype == 'i' or itemtype == 'd':
+        pos = text.index(';')
+        data = int(text[2  : pos])
+        #text = text[pos + 1 : ]
 
-    elif type == 'N':
+    elif itemtype == 'N':
         data = None
-        #str = str[str.index(';') + 1 : ]
+        #text = text[text.index(';') + 1 : ]
 
-    elif type == 'b':
-        if str[2] == '1':
+    elif itemtype == 'b':
+        if text[2] == '1':
             data = True
         else:
             data = False
@@ -259,7 +259,7 @@ class MailMessage:
         day = int(mo.group('day'))
         year = int(mo.group('year'))
         hour = int(mo.group('hour'))
-        min = int(mo.group('min'))
+        minutes = int(mo.group('min'))
         sec = int(mo.group('sec'))
         zoneh = int(mo.group('zoneh'))
         zonem = int(mo.group('zonem'))
@@ -270,7 +270,7 @@ class MailMessage:
         if zonen == '-':
             zone = -zone
 
-        tt = (year, mon, day, hour, min, sec, -1, -1, -1)
+        tt = (year, mon, day, hour, minutes, sec, -1, -1, -1)
 
         utc = time.mktime(tt)
 
@@ -306,9 +306,9 @@ def checkImapError(typ, resp):
 
 
 class NamedStringIO(pyStringIO):
-    def __init__(self, name, buffer = None):
+    def __init__(self, name, buf = None):
         self.name = name
-        pyStringIO.__init__(self, buffer)
+        pyStringIO.__init__(self, buf)
 
 class IExpressoError(Exception):
     pass
@@ -631,9 +631,9 @@ class ExpressoManager:
             return None #mensagem inválida
         return source
 
-    def importMsgs(self, msgfolder, file):
+    def importMsgs(self, msgfolder, msgfile):
         url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
-                                                    'countFiles': 1, 'file_1' : file}, True)
+                                                    'countFiles': 1, 'file_1' : msgfile}, True)
         url.close()
         #verifica se aconteceu algum erro
         result = self.callExpresso(self.urlGetReturnExecuteForm)
@@ -819,63 +819,63 @@ class MsgList():
     def wasModified(self):
         return self.updated or self.msgupdated
 
-    def saveSet(self, setToSave, file):
+    def saveSet(self, setToSave, dbfile):
         if setToSave is None:
-            file.write('0\n')
+            dbfile.write('0\n')
         else:
-            file.write(str(len(setToSave)))
-            file.write('\n')
+            dbfile.write(str(len(setToSave)))
+            dbfile.write('\n')
             for item in setToSave:
-                file.write(item.encode('utf-8'))
-                file.write('\n')
+                dbfile.write(item.encode('utf-8'))
+                dbfile.write('\n')
 
-    def save(self, file):
-        file.write("5\n") # versão
-        file.write(self.signature.encode('utf-8'))
-        file.write('\n')
+    def save(self, dbfile):
+        dbfile.write("5\n") # versão
+        dbfile.write(self.signature.encode('utf-8'))
+        dbfile.write('\n')
         # write folders
-        self.saveSet(self.folders, file)
+        self.saveSet(self.folders, dbfile)
         # write messages
-        for id, msg in self.db.items():
-            file.write(id.encode('utf-8'))
-            file.write('\x00')
-            file.write(str(msg.id))
-            file.write('\x00')
-            file.write(msg.hashid)
-            file.write('\x00')
-            file.write(msg.folder.encode('utf-8'))
-            file.write('\x00')
-            file.write(msg.flags.encode('utf-8'))
-            file.write('\n')
+        for dbid, msg in self.db.items():
+            dbfile.write(dbid.encode('utf-8'))
+            dbfile.write('\x00')
+            dbfile.write(str(msg.id))
+            dbfile.write('\x00')
+            dbfile.write(msg.hashid)
+            dbfile.write('\x00')
+            dbfile.write(msg.folder.encode('utf-8'))
+            dbfile.write('\x00')
+            dbfile.write(msg.flags.encode('utf-8'))
+            dbfile.write('\n')
         self.isNew = False
 
-    def loadSet(self, file):
+    def loadSet(self, dbfile):
         lset = set()
-        count = int(file.readline().strip())
-        for i in range(count):
-            lset.add(file.readline().strip().decode('utf-8'))
+        count = int(dbfile.readline().strip())
+        for _ in range(count):
+            lset.add(dbfile.readline().strip().decode('utf-8'))
         return lset
 
-    def load(self, file):
-        line = file.readline().strip()
+    def load(self, dbfile):
+        line = dbfile.readline().strip()
         version = int(line)
         if version < 3 or version > 5:
             log( "DB-Version:", line )
             raise IExpressoError(_('Unsupported DB version.'))
-        self.signature = file.readline().strip()
+        self.signature = dbfile.readline().strip()
         self.isNew = False
         #load folders
         if version >= 4:
-            self.folders = self.loadSet(file)
+            self.folders = self.loadSet(dbfile)
         #load messages
-        line = file.readline().strip()
+        line = dbfile.readline().strip()
         while line != '':
             parts = line.split('\x00')
             if version >= 5:
                 self.add(parts[0].decode('utf-8'), int(parts[1]), parts[2], parts[3].decode('utf-8'), parts[4].decode('utf-8'))
             else:
                 self.add(parts[0].decode('utf-8'), int(parts[1]), '', parts[2].decode('utf-8'), parts[3].decode('utf-8'))
-            line = file.readline().strip()
+            line = dbfile.readline().strip()
 
 
 #########################################################
@@ -928,11 +928,11 @@ class MailSynchronizer():
             self.client.logout()
 
     def getLocalFolders(self):
-        (typ, list) = self.client.list('""', '*')
-        checkImapError(typ, list)
+        (typ, imapFolders) = self.client.list('""', '*')
+        checkImapError(typ, imapFolders)
         lst = set()
-        for item in list:
-            folder = getFolderPath(item)
+        for imapFolder in imapFolders:
+            folder = getFolderPath(imapFolder)
             if not folder.startswith('INBOX'):
                 continue
             if folder != self.metadataFolder:
@@ -986,7 +986,7 @@ class MailSynchronizer():
                 self.localFolders.add(folder)
 
     def getLocalSignature(self):
-        typ, msg = self.client.select(self.metadataFolder, True)
+        typ, _ = self.client.select(self.metadataFolder, True)
         if typ != 'OK':
             return None
         typ, msg = self.client.fetch('1', '(BODY[HEADER.FIELDS (Message-Id)])')
