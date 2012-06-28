@@ -654,7 +654,7 @@ class ExpressoManager:
                 eflags.append('')
 
         url = self.openUrl(self.urlController, {'folder': msgfolder.encode('utf-8'),
-                                                '_action': '$this.imap_functions.unarchive_mail',
+                                                '_action': '$this.imap_functions.unarchive_mail', 'id' : '1',
                                                 'source': source, 'timestamp' : msgtime, 'flags' : ':'.join(eflags)}, True)
         url.close()
         #verifica se aconteceu algum erro
@@ -755,16 +755,16 @@ class MsgList():
     def ekey(self, msgid, msgfolder):
         return '%d@%s' % (msgid, msgfolder)
 
-    def add(self, id, msgid, hashid, msgfolder, msgflags):
-        self.db[id] = MsgItem(msgid, hashid, msgfolder, msgflags)
-        self.eindex[self.ekey(msgid, msgfolder)] = id
+    def add(self, dbid, msgid, hashid, msgfolder, msgflags):
+        self.db[dbid] = MsgItem(msgid, hashid, msgfolder, msgflags)
+        self.eindex[self.ekey(msgid, msgfolder)] = dbid
 
-    def get(self, id):
-        msg = self.db[id]
+    def get(self, dbid):
+        msg = self.db[dbid]
         return (msg.id, msg.folder, msg.flags)
 
-    def getHashId(self, id):
-        return self.db[id].hashid
+    def getHashId(self, dbid):
+        return self.db[dbid].hashid
 
     def getIds(self):
         return set(self.db.keys())
@@ -775,26 +775,26 @@ class MsgList():
     def isEmpty(self):
         return len(self.db) == 0
 
-    def exists(self, id):
-        return id in self.db
+    def exists(self, dbid):
+        return dbid in self.db
 
     def clearStats(self):
         self.updated = False
         self.msgupdated = False
 
-    def update(self, id, msgid, msgfolder, msgflags, hashid = None):
-        if id in self.db:
+    def update(self, dbid, msgid, msgfolder, msgflags, hashid = None):
+        if dbid in self.db:
             self.msgupdated = True
-            msg = self.db[id]
+            msg = self.db[dbid]
             if msg.id != msgid or msg.folder != msgfolder:
                 # remove a chave do índice e ela ainda estiver relacionada a esta mensagem
                 oldkey = self.ekey(msg.id, msg.folder)
-                if self.eindex[oldkey] == id:
+                if self.eindex[oldkey] == dbid:
                     del self.eindex[oldkey]
                 # atualiza a mensagem e o índice
                 msg.id = msgid
                 msg.folder = msgfolder
-                self.eindex[self.ekey(msgid, msgfolder)] = id
+                self.eindex[self.ekey(msgid, msgfolder)] = dbid
             if not hashid is None:
                 msg.hashid = hashid
             msg.flags = msgflags
@@ -802,7 +802,7 @@ class MsgList():
             if hashid is None:
                 raise Exception('HashId is None.')
             self.updated = True
-            self.add(id, msgid, hashid, msgfolder, msgflags)
+            self.add(dbid, msgid, hashid, msgfolder, msgflags)
 
     def folderIsEmpty(self, folder):
         for msg in self.db.values():
@@ -810,10 +810,10 @@ class MsgList():
                 return False
         return True
 
-    def delete(self, id):
-        msg = self.db[id]
+    def delete(self, dbid):
+        msg = self.db[dbid]
         del self.eindex[self.ekey(msg.id, msg.folder)]
-        del self.db[id]
+        del self.db[dbid]
         self.updated = True
 
     def wasModified(self):
@@ -1254,26 +1254,26 @@ class MailSynchronizer():
 
         curids = edb.getIds()
 
-        for id in self.db.getIds():
-            if not id in curids:
+        for dbid in self.db.getIds():
+            if not dbid in curids:
                 #exclui do imap local
-                if localdb.exists(id):
-                    msgid, msgfolder = localdb.get(id)[0:2]
-                    log( 'Deleting from local %s id %d' % (msgfolder, msgid) )
+                if localdb.exists(dbid):
+                    msgid, msgfolder = localdb.get(dbid)[0:2]
+                    log( 'Deleting from local %s dbid %d' % (msgfolder, msgid) )
                     deleteAfter(msgfolder, msgid)
-                    localdb.delete(id)
+                    localdb.delete(dbid)
 
-                self.db.delete(id)
+                self.db.delete(dbid)
             else:
-                curid, curfolder, curflags = edb.get(id)
-                hashid = edb.getHashId(id)
-                if not localdb.exists(id):
+                curid, curfolder, curflags = edb.get(dbid)
+                hashid = edb.getHashId(dbid)
+                if not localdb.exists(dbid):
                     #atualiza o banco
-                    self.db.update(id, curid, curfolder, curflags, hashid)
+                    self.db.update(dbid, curid, curfolder, curflags, hashid)
                     continue #deve ser uma mensagem excluída localmente
 
-                msgid, msgfolder, msgflags = localdb.get(id)
-                efolder, eflags = self.db.get(id)[1:3]
+                msgid, msgfolder, msgflags = localdb.get(dbid)
+                efolder, eflags = self.db.get(dbid)[1:3]
                 if curflags != eflags and curflags != msgflags:
                     diff = self.flagsdiff(curflags, eflags)
                     if len(diff) > 0:
@@ -1297,7 +1297,7 @@ class MailSynchronizer():
                     self.client.select(msgfolder.encode('imap4-utf-7'), True)
                     self.client.copy(str(msgid), curfolder.encode('imap4-utf-7'))
                 #atualiza o banco
-                self.db.update(id, curid, curfolder, curflags, hashid)
+                self.db.update(dbid, curid, curfolder, curflags, hashid)
 
         #exclui as mensagens e faz expunge da pasta
         for folder in folders_expunge.keys():
@@ -1434,16 +1434,15 @@ class MailSynchronizer():
 
         def moveAfter(efolder, newfolder, eid):
             pair = (efolder, newfolder)
-            #log( pair, id )
             if pair in tomove:
                 tomove[pair].append(eid)
             else:
                 tomove[pair] = [eid]
 
         if doDelete:
-            for id in self.db.getIds():
-                if not localdb.exists(id):
-                    eid, efolder = self.db.get(id)[0:2]
+            for dbid in self.db.getIds():
+                if not localdb.exists(dbid):
+                    eid, efolder = self.db.get(dbid)[0:2]
                     #por motivos de segurança só deveria excluir da lixeira,
                     # após algum tempo de teste essa restrição foi removida
                     if efolder in todelete:
@@ -1455,10 +1454,10 @@ class MailSynchronizer():
 
             self.deleteFromExpresso(localdb, todelete)
 
-        for id in localdb.getIds():
-            msgid, msgfolder, msgflags = localdb.get(id)
-            if self.db.exists(id):
-                eid, efolder, eflags = self.db.get(id)
+        for dbid in localdb.getIds():
+            msgid, msgfolder, msgflags = localdb.get(dbid)
+            if self.db.exists(dbid):
+                eid, efolder, eflags = self.db.get(dbid)
                 #move as mensagens que foram movidas
                 if doMove and msgfolder != efolder:
                     moveAfter(efolder, msgfolder, eid)
@@ -1468,11 +1467,11 @@ class MailSynchronizer():
                     #log( "msgflags: %s  eflags: %s" % (msgflags, eflags) )
                     diff = self.flagsdiff(msgflags, eflags)
                     if len(diff) > 0:
-                        newflags[id] = self.mapFlagsExpresso(toflag, eid, efolder, eflags, diff)
+                        newflags[dbid] = self.mapFlagsExpresso(toflag, eid, efolder, eflags, diff)
             elif doImport:
                 if msgflags.find(r'\Deleted') < 0 and not msgfolder.endswith('/Trash'):
                     #por enquanto só importa itens que tenham um Message-ID
-                    self.importMsgExpresso(msgfolder, msgid, msgflags, id)
+                    self.importMsgExpresso(msgfolder, msgid, msgflags, dbid)
 
         self.flagMessagesExpresso(toflag, newflags)
 
@@ -1521,10 +1520,10 @@ class MailSynchronizer():
         return diff
 
 
-def getFolderPath(str):
-    p1 = str.rindex('"', 0)
-    p2 = str.rindex('"', 0, p1-1)
-    return str[p2 + 1:p1].decode('imap4-utf-7') # codec definido em imap4utf7
+def getFolderPath(imapfolder):
+    p1 = imapfolder.rindex('"', 0)
+    p2 = imapfolder.rindex('"', 0, p1-1)
+    return imapfolder[p2 + 1:p1].decode('imap4-utf-7') # codec definido em imap4utf7
 
 if __name__ == "__main__":
     import getpass
