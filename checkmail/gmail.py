@@ -54,11 +54,11 @@ class GmailService(CheckMailService):
         msgs = set()
         for entry in entrys:
             subject = getText(entry.getElementsByTagName("title"))
-            id = getText(entry.getElementsByTagName("id"))
+            msgid = getText(entry.getElementsByTagName("id"))
             date = getText(entry.getElementsByTagName("issued"))
             # filter old messages
             if datetime.datetime.strptime(date, "%Y-%m-%dT%H:%M:%SZ") > datetime.datetime(2012,01,01):
-                msgs.add((id, subject))
+                msgs.add((msgid, subject))
         return msgs
 
 ########################################
