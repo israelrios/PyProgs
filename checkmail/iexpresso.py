@@ -836,7 +836,7 @@ class MsgList():
                 dbfile.write('\n')
 
     def save(self, dbfile):
-        dbfile.write("5\n") # versão
+        dbfile.write("6\n") # versão
         dbfile.write(self.signature.encode('utf-8'))
         dbfile.write('\n')
         # write folders
@@ -868,7 +868,7 @@ class MsgList():
     def load(self, dbfile):
         line = dbfile.readline().strip()
         version = int(line)
-        if version < 3 or version > 5:
+        if version < 3 or version > 6:
             log( "DB-Version:", line )
             raise IExpressoError(_('Unsupported DB version.'))
         self.signature = dbfile.readline().strip()
