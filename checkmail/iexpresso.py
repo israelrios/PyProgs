@@ -428,20 +428,20 @@ class ExpressoMessage:
         return m.hexdigest()
 
     def getFlags(self):
-        flags = []
+        flags = set()
         if self.answered:
-            flags.append(r'\Answered')
+            flags.add(r'\Answered')
         if not self.unread:
-            flags.append(r'\Seen')
+            flags.add(r'\Seen')
         if self.deleted:
-            flags.append(r'\Deleted')
+            flags.add(r'\Deleted')
         if self.draft:
-            flags.append(r'\Draft')
+            flags.add(r'\Draft')
         if self.flagged:
-            flags.append(r'\Flagged')
+            flags.add(r'\Flagged')
         if self.forwarded:
-            flags.append(r'$Forwarded')
-        return '(' + ' '.join(flags) + ')'
+            flags.add(r'$Forwarded')
+        return flags
 
     def createMimeMessage(self, dbid = None):
         # Create the container (outer) email message.
@@ -661,8 +661,7 @@ class ExpressoManager:
         result = self.callExpresso(self.urlGetReturnExecuteForm)
         if 'error' in result and not isinstance(result['error'], bool) and result['error'].strip() != '':
             raise Exception(result['error'])
-        #no result tem o número da mensagem inserida dentro da pasta
-        return result['msg_no']
+        # o result contem um item 'archived' com o número do mensagem passado no parâmetro 'id'
 
     def setMsgFlag(self, msgfolder, msgid, flag):
         self.callExpresso(self.urlSetFlags, {'flag': flag.lower(), 'msgs_to_set' : msgid, 'folder' : msgfolder.encode('iso-8859-1')})
@@ -753,11 +752,12 @@ class MsgList():
         self.msgupdated = False # quando algum flag da mensagem foi modificado ou a mensagem foi movida
 
     def ekey(self, msgid, msgfolder):
-        return '%d@%s' % (msgid, msgfolder)
+        return '{0}@{1}'.format(msgid, msgfolder)
 
     def add(self, dbid, msgid, hashid, msgfolder, msgflags):
         self.db[dbid] = MsgItem(msgid, hashid, msgfolder, msgflags)
-        self.eindex[self.ekey(msgid, msgfolder)] = dbid
+        if msgid != '':
+            self.eindex[self.ekey(msgid, msgfolder)] = dbid
 
     def get(self, dbid):
         msg = self.db[dbid]
@@ -787,14 +787,16 @@ class MsgList():
             self.msgupdated = True
             msg = self.db[dbid]
             if msg.id != msgid or msg.folder != msgfolder:
-                # remove a chave do índice e ela ainda estiver relacionada a esta mensagem
-                oldkey = self.ekey(msg.id, msg.folder)
-                if self.eindex[oldkey] == dbid:
-                    del self.eindex[oldkey]
+                # remove a chave do índice se ela ainda estiver relacionada a esta mensagem
+                if msg.id != '':
+                    oldkey = self.ekey(msg.id, msg.folder)
+                    if self.eindex[oldkey] == dbid:
+                        del self.eindex[oldkey]
                 # atualiza a mensagem e o índice
                 msg.id = msgid
                 msg.folder = msgfolder
-                self.eindex[self.ekey(msgid, msgfolder)] = dbid
+                if msgid != '':
+                    self.eindex[self.ekey(msgid, msgfolder)] = dbid
             if not hashid is None:
                 msg.hashid = hashid
             msg.flags = msgflags
@@ -812,12 +814,16 @@ class MsgList():
 
     def delete(self, dbid):
         msg = self.db[dbid]
-        del self.eindex[self.ekey(msg.id, msg.folder)]
+        if msg.id != '':
+            del self.eindex[self.ekey(msg.id, msg.folder)]
         del self.db[dbid]
         self.updated = True
 
     def wasModified(self):
         return self.updated or self.msgupdated
+
+    def setUpdated(self):
+        self.updated = True
 
     def saveSet(self, setToSave, dbfile):
         if setToSave is None:
@@ -845,7 +851,7 @@ class MsgList():
             dbfile.write('\x00')
             dbfile.write(msg.folder.encode('utf-8'))
             dbfile.write('\x00')
-            dbfile.write(msg.flags.encode('utf-8'))
+            dbfile.write((' '.join(msg.flags)).encode('utf-8'))
             dbfile.write('\n')
         self.isNew = False
 
@@ -855,6 +861,9 @@ class MsgList():
         for _ in range(count):
             lset.add(dbfile.readline().strip().decode('utf-8'))
         return lset
+
+    def parseFlags(self, sflags):
+        return set(re.sub(r'[\(\)]', '', sflags).strip().split())
 
     def load(self, dbfile):
         line = dbfile.readline().strip()
@@ -872,9 +881,9 @@ class MsgList():
         while line != '':
             parts = line.split('\x00')
             if version >= 5:
-                self.add(parts[0].decode('utf-8'), int(parts[1]), parts[2], parts[3].decode('utf-8'), parts[4].decode('utf-8'))
+                self.add(parts[0].decode('utf-8'), parts[1], parts[2], parts[3].decode('utf-8'), self.parseFlags(parts[4].decode('utf-8')))
             else:
-                self.add(parts[0].decode('utf-8'), int(parts[1]), '', parts[2].decode('utf-8'), parts[3].decode('utf-8'))
+                self.add(parts[0].decode('utf-8'), parts[1], '', parts[2].decode('utf-8'), self.parseFlags(parts[4].decode('utf-8')))
             line = dbfile.readline().strip()
 
 
@@ -883,6 +892,8 @@ class MsgList():
 #########################################################
 class MailSynchronizer():
     metadataFolder = 'INBOX/_metadata_dont_delete'
+    ignoredFlags = set([r'\Unseen', r'\Recent'])
+
     def __init__(self):
         if not os.path.exists(iexpressodir):
             os.mkdir(iexpressodir)
@@ -891,6 +902,7 @@ class MailSynchronizer():
         self.client = None
         self.curday = 0
         self.defaultFolders = frozenset(['INBOX', 'INBOX/Sent', 'INBOX/Trash', 'INBOX/Drafts'])
+        self.staleMsgs = {}
 
     def loginLocal(self):
         try:
@@ -1028,6 +1040,18 @@ class MailSynchronizer():
         else:
             return MsgList()
 
+    def unstale(self, dbid):
+        self.staleMsgs.pop(dbid, '')
+
+    def refreshSingleFolder(self, localdb, folder):
+        edb = self.loadExpressoMessages('ALL', localdb, [folder])
+
+        self.changeLocal(edb, localdb, doDelete=False)
+
+        for dbid, dbfolder in self.staleMsgs.items():
+            if dbfolder == folder:
+                del self.staleMsgs[dbid]
+
     def loadLocalMsgs(self):
         self.closeLocalFolder()
         self.getLocalFolders()
@@ -1048,7 +1072,7 @@ class MailSynchronizer():
                         if m != ')' and isinstance(m, tuple):
                             try:
                                 localid = int(m[0][:m[0].index('(')])
-                                flags = imaplib.ParseFlags(m[0])
+                                flags = set(imaplib.ParseFlags(m[0]))
                                 #extrai o dbid
                                 headers = m[1]
                                 mailmessage = MailMessage(headers)
@@ -1056,9 +1080,8 @@ class MailSynchronizer():
                                 if dbid == None or dbid == '':
                                     raise IExpressoError(_('Error loading local messages.'))
 
-                                if r'\Unseen' in flags:
-                                    flags -= (r'\Unseen',)
-                                localdb.add(dbid, localid, '', folder, '(' + ' '.join(flags) + ')')
+                                flags -= self.ignoredFlags
+                                localdb.add(dbid, localid, '', folder, flags)
                                 msgcount += 1
                             except:
                                 log( m )
@@ -1074,6 +1097,7 @@ class MailSynchronizer():
                 else:
                     raise IExpressoError(_('Error loading local messages.'))
         self.closeLocalFolder()
+        localdb.clearStats()
         return localdb
 
     def getDbId(self, mailmessage, genId = False):
@@ -1133,14 +1157,18 @@ class MailSynchronizer():
                         eflags = msg.getFlags()
                         mailmessage = MailMessage( newmsgs[msg.id] )
                         dbid = self.getDbId(mailmessage, True)
-                        log( '  ', msg.id, eflags, dbid ) #fullmsg['Subject'] )
+                        strflags = '(' + ' '.join(eflags) + ')'
+                        log( '  ', msg.id, strflags, dbid ) #fullmsg['Subject'] )
                         if not self.db.exists(dbid):
                             if not localdb.exists(dbid):
                                 self.createLocalFolder(folder_id)
                                 mailmessage.fixSubjectBrokenWord()
-                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), eflags, None, mailmessage.msgsrc)
+                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), strflags, None, mailmessage.msgsrc)
                                 checkImapError(typ, resp)
+                                # insert a dummy record that can't be used to update local imap
+                                localdb.setUpdated()
                             self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+                            self.unstale(dbid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                 #re-verifica se todas as mensagens foram baixadas
                 if len(newmsgs) != len(todownload):
@@ -1163,16 +1191,21 @@ class MailSynchronizer():
             localdb = self.initUpdate()
 
             try:
-                #move, deleta e atualiza as mensagens no expresso
-                self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True)
-
                 edb = self.loadExpressoMessages('ALL', localdb, self.db.folders)
-                # o usuário pode ter alterado a estrutura local enquanto as mensagens do expresso eram carregadas
-                # por isso deve-se recarregar o banco local
+
+                # get local new and changed messages
                 localdb = self.loadLocalMsgs()
 
                 #remove as mensagens que não estão mais na caixa do expresso da caixa local
                 self.changeLocal(edb, localdb)
+
+                if localdb.wasModified():
+                    localdb = self.loadLocalMsgs()
+
+                self.staleMsgs.clear()
+
+                #move, deleta e atualiza as mensagens no expresso
+                self.changeExpresso(localdb, doMove = True, doDelete = True, doImport = True)
 
                 self.checkDeletedFolders()
             finally:
@@ -1243,67 +1276,75 @@ class MailSynchronizer():
         if self.client.state == 'SELECTED':
             self.client.close()
 
-    def changeLocal(self, edb, localdb):
+    def changeLocal(self, edb, localdb, doDelete = True):
         #seleciona as mensagens a serem excluídas
         folders_expunge = {}
-        def deleteAfter(msgfolder, msgid):
-            if msgfolder in folders_expunge:
-                folders_expunge[msgfolder].append(msgid)
+        def deleteAfter(localfolder, localid):
+            if localfolder in folders_expunge:
+                folders_expunge[localfolder].append(localid)
             else:
-                folders_expunge[msgfolder] = [msgid]
+                folders_expunge[localfolder] = [localid]
 
         curids = edb.getIds()
 
         for dbid in self.db.getIds():
             if not dbid in curids:
+                if not doDelete:
+                    continue
                 #exclui do imap local
                 if localdb.exists(dbid):
-                    msgid, msgfolder = localdb.get(dbid)[0:2]
-                    log( 'Deleting from local %s dbid %d' % (msgfolder, msgid) )
-                    deleteAfter(msgfolder, msgid)
+                    localid, localfolder = localdb.get(dbid)[0:2]
+                    log( 'Deleting from local %s dbid %d' % (localfolder, localid) )
+                    deleteAfter(localfolder, localid)
                     localdb.delete(dbid)
 
                 self.db.delete(dbid)
+                self.unstale(dbid)
             else:
-                curid, curfolder, curflags = edb.get(dbid)
+                eid, efolder, eflags = edb.get(dbid)
                 hashid = edb.getHashId(dbid)
                 if not localdb.exists(dbid):
-                    #atualiza o banco
-                    self.db.update(dbid, curid, curfolder, curflags, hashid)
-                    continue #deve ser uma mensagem excluída localmente
+                    # atualiza o banco
+                    self.db.update(dbid, eid, efolder, eflags, hashid)
+                    self.unstale(dbid)
+                    continue # deve ser uma mensagem excluída localmente
 
-                msgid, msgfolder, msgflags = localdb.get(dbid)
-                efolder, eflags = self.db.get(dbid)[1:3]
-                if curflags != eflags and curflags != msgflags:
-                    diff = self.flagsdiff(curflags, eflags)
+                localid, localfolder, localflags = localdb.get(dbid)
+                dbfolder, dbflags = self.db.get(dbid)[1:3]
+                if eflags != dbflags and eflags != localflags:
+                    diff = self.flagsdiff(eflags, dbflags)
                     if len(diff) > 0:
-                        self.client.select(msgfolder.encode('imap4-utf-7'), False)
+                        self.client.select(localfolder.encode('imap4-utf-7'), False)
                         # NOTE: forwarded não pode ser representando no bincimap (sem as alterações realizadas por mim)
-                        log( 'Update local flag. Id: %d   folder: %s   flags: %s  localflags: %s' % (msgid, msgfolder, str(' '.join(diff)), msgflags) )
+                        log( 'Update local flag. Id: %d   folder: %s   flags: %s  localflags: %s'
+                                % (localid, localfolder, str(' '.join(diff)), ' '.join(localflags)) )
                         if r'\Unseen' in diff:
                             del diff[diff.index(r'\Unseen')]
-                            self.client.store(str(msgid), '-FLAGS', r'\Seen')
+                            self.client.store(str(localid), '-FLAGS', r'\Seen')
                         if r'\Unflagged' in diff:
                             del diff[diff.index(r'\Unflagged')]
-                            self.client.store(str(msgid), '-FLAGS', r'\Flagged')
+                            self.client.store(str(localid), '-FLAGS', r'\Flagged')
                         if len(diff) > 0:
-                            self.client.store(str(msgid), '+FLAGS', ' '.join(diff))
+                            self.client.store(str(localid), '+FLAGS', ' '.join(diff))
+                        localdb.setUpdated()
                         self.closeLocalFolder()
-                if curfolder != efolder and curfolder != msgfolder:
-                    #move a mensagens localmente
-                    log( 'Moving local message id: %d  folder: %s  new_folder: %s' % (msgid, msgfolder.encode('utf-8'), curfolder.encode('utf-8')) )
-                    self.createLocalFolder(curfolder)
-                    deleteAfter(msgfolder, msgid)
-                    self.client.select(msgfolder.encode('imap4-utf-7'), True)
-                    self.client.copy(str(msgid), curfolder.encode('imap4-utf-7'))
-                #atualiza o banco
-                self.db.update(dbid, curid, curfolder, curflags, hashid)
+                if efolder != dbfolder and efolder != localfolder:
+                    # move a mensagens localmente
+                    log( 'Moving local message id: %d  folder: %s  new_folder: %s' % (localid, localfolder.encode('utf-8'), efolder.encode('utf-8')) )
+                    self.createLocalFolder(efolder)
+                    deleteAfter(localfolder, localid)
+                    self.client.select(localfolder.encode('imap4-utf-7'), True)
+                    self.client.copy(str(localid), efolder.encode('imap4-utf-7'))
+                    localdb.setUpdated()
+                # atualiza o banco
+                self.db.update(dbid, eid, efolder, eflags, hashid)
+                self.unstale(dbid)
 
-        #exclui as mensagens e faz expunge da pasta
+        # exclui as mensagens e faz expunge da pasta
         for folder in folders_expunge.keys():
             self.client.select(folder.encode('imap4-utf-7'), False)
-            for msgid in folders_expunge[folder]:
-                self.client.store(str(msgid), '+FLAGS', '\\Deleted')
+            for localid in folders_expunge[folder]:
+                self.client.store(str(localid), '+FLAGS', '\\Deleted')
             self.client.expunge()
             self.closeLocalFolder()
 
@@ -1353,20 +1394,13 @@ class MailSynchronizer():
                 log('Importing message without date info.')
                 date = time.mktime(time.localtime())
 
-            flagset = set(localflags[1:-1].split())
+            flagset = set(localflags)
             if not '\\Seen' in flagset:
                 flagset.add('\\Unseen')
-            eid = self.es.importMsgWithTime(folder, msgheader + msgbody, date, flagset)
-            if eid is None or str(eid) == '':
-                log('Error importing message: ', dbid, eid)
-            else:
-                curid = self.db.getId(eid, folder)
-                if curid != None and curid != dbid:
-                    log('Error importing message (invalid return value): ', eid, curid, dbid)
-                    # o import será realizado novamente no próximo full refresh.
-                else:
-                    log( '  ', eid, localflags, dbid )
-                    self.db.update(dbid, eid, folder, localflags, '')
+            self.es.importMsgWithTime(folder, msgheader + msgbody, date, flagset)
+
+            self.staleMsgs[dbid] = folder
+            self.db.update(dbid, '', folder, localflags, '')
 
         self.closeLocalFolder()
 
@@ -1408,7 +1442,7 @@ class MailSynchronizer():
                         if dbid != None and dbid in newflags:
                             self.db.update(dbid, eid, folder, newflags[dbid]) # atualiza o banco
                         else:
-                            log("Message not found:", eid, folder, dbid, newflags)
+                            log("Message not found:", eid, folder, dbid, ' '.join(newflags))
 
     def createFolderExpresso(self, newfolder):
         for folder in self.iterParents(newfolder):
@@ -1417,68 +1451,109 @@ class MailSynchronizer():
                 self.es.createFolder(folder) #cria a pasta no expresso
                 self.db.folders.add(folder)
 
+    class ToMoveItem:
+        def __init__(self, dbid, eid):
+            self.dbid = dbid
+            self.eid = eid
+
     def moveMessagesExpresso(self, tomove):
         # move as mensagens
-        for (efolder, newfolder), eids in tomove.items():
-            strids = ','.join([str(eid) for eid in eids])
+        for (efolder, newfolder), items in tomove.items():
+            strids = ','.join([str(item.eid) for item in items])
             log( 'Moving ids: %s   folder: %s   newfolder: %s' % (strids, efolder, newfolder) )
             self.createFolderExpresso(newfolder)
             self.es.moveMsgs(strids, efolder, newfolder)
+            for item in items:
+                self.staleMsgs[item.dbid] = newfolder
+
+    def safeFolderId(self, localdb, dbid):
+        if dbid in self.staleMsgs:
+            self.refreshSingleFolder(localdb, self.staleMsgs[dbid])
+        return self.db.get(dbid)[0:2]
 
     def changeExpresso(self, localdb, doImport = False, doMove = False, doDelete = False):
-        #verifica as mensagens que não existem mais na caixa local
-        todelete = {}
-        toflag = {}
-        tomove = {}
-        newflags = {}
-
-        def moveAfter(efolder, newfolder, eid):
-            pair = (efolder, newfolder)
-            if pair in tomove:
-                tomove[pair].append(eid)
+        for _ in range(2):
+            localdb.clearStats()
+            diff = self.computeExpressoDiff(localdb, doImport, doMove, doDelete)
+            if not localdb.wasModified():
+                break
             else:
-                tomove[pair] = [eid]
+                localdb = self.loadLocalMsgs()
+
+        self.deleteFromExpresso(localdb, diff.todelete)
+
+        self.flagMessagesExpresso(diff.toflag, diff.newflags)
+
+        self.moveMessagesExpresso(diff.tomove)
+
+        for dbid in diff.toimport:
+            msgid, msgfolder, msgflags = localdb.get(dbid)
+            self.importMsgExpresso(msgfolder, msgid, msgflags, dbid)
+
+    class ExpressoDiff:
+        def __init__(self):
+            self.todelete = {}
+            self.toflag = {}
+            self.tomove = {}
+            self.newflags = {}
+            self.toimport = []
+
+        def move(self, efolder, newfolder, dbid, eid):
+            pair = (efolder, newfolder)
+            if pair in self.tomove:
+                self.tomove[pair].append(MailSynchronizer.ToMoveItem(dbid, eid))
+            else:
+                self.tomove[pair] = [MailSynchronizer.ToMoveItem(dbid, eid)]
+
+        def delete(self, efolder, eid):
+            if efolder in self.todelete:
+                self.todelete[efolder].append(eid)
+            else:
+                self.todelete[efolder] = [eid]
+
+    def computeExpressoDiff(self, localdb, doImport = False, doMove = False, doDelete = False):
+        #verifica as mensagens que não existem mais na caixa local
+        exdiff = self.ExpressoDiff()
 
         if doDelete:
             for dbid in self.db.getIds():
                 if not localdb.exists(dbid):
-                    eid, efolder = self.db.get(dbid)[0:2]
-                    #por motivos de segurança só deveria excluir da lixeira,
-                    # após algum tempo de teste essa restrição foi removida
-                    if efolder in todelete:
-                        todelete[efolder].append(eid)
+                    eid, efolder = self.safeFolderId(localdb, dbid)
+                    if eid == '': # its a failed import?
+                        self.db.delete(dbid)
                     else:
-                        todelete[efolder] = [eid]
-                    #else:
-                    #    moveAfter(efolder, 'INBOX/Trash', eid) #move pra lixeira quando estiver excluída
-
-            self.deleteFromExpresso(localdb, todelete)
+                        # por motivos de segurança só deveria excluir da lixeira,
+                        # após algum tempo de teste essa restrição foi removida
+                        exdiff.delete(efolder, eid)
+                        #else:
+                        #    exdiff.move(efolder, 'INBOX/Trash', dbid, eid) #move pra lixeira quando estiver excluída
 
         for dbid in localdb.getIds():
-            msgid, msgfolder, msgflags = localdb.get(dbid)
+            _, localfolder, localflags = localdb.get(dbid)
+            eid = ''
             if self.db.exists(dbid):
                 eid, efolder, eflags = self.db.get(dbid)
+            # eid equals to '' when the import failed or its a new message
+            if eid != '':
                 #move as mensagens que foram movidas
-                if doMove and msgfolder != efolder:
-                    moveAfter(efolder, msgfolder, eid)
+                if doMove and localfolder != efolder:
+                    eid, efolder = self.safeFolderId(localdb, dbid)
+                    exdiff.move(efolder, localfolder, dbid, eid)
 
                 #altera os flags das mensagens lidas e respondidas
-                if msgflags != eflags:
-                    #log( "msgflags: %s  eflags: %s" % (msgflags, eflags) )
-                    diff = self.flagsdiff(msgflags, eflags)
-                    if len(diff) > 0:
-                        newflags[dbid] = self.mapFlagsExpresso(toflag, eid, efolder, eflags, diff)
+                if localflags != eflags:
+                    fdiff = self.flagsdiff(localflags, eflags)
+                    if len(fdiff) > 0:
+                        eid, efolder = self.safeFolderId(localdb, dbid)
+                        exdiff.newflags[dbid] = self.mapFlagsExpresso(exdiff.toflag, eid, efolder, eflags, fdiff)
             elif doImport:
-                if msgflags.find(r'\Deleted') < 0 and not msgfolder.endswith('/Trash'):
-                    #por enquanto só importa itens que tenham um Message-ID
-                    self.importMsgExpresso(msgfolder, msgid, msgflags, dbid)
+                if not (r'\Deleted' in localflags) and not localfolder.endswith('/Trash'):
+                    exdiff.toimport.append(dbid)
 
-        self.flagMessagesExpresso(toflag, newflags)
-
-        self.moveMessagesExpresso(tomove)
+        return exdiff
 
     def mapFlagsExpresso(self, toflag, eid, efolder, eflags, diff):
-        newflags = set(eflags[1:-1].split())
+        newflags = set(eflags)
         if efolder in toflag:
             flags = toflag[efolder]
         else:
@@ -1504,11 +1579,9 @@ class MailSynchronizer():
         if r'$Forwarded' in diff:
             flags['forwarded'].append(eid)
             newflags.add(r'$Forwarded')
-        return '(' + ' '.join(newflags) + ')'
+        return newflags
 
-    def flagsdiff(self, sflags1, sflags2):
-        flags1 = sflags1[1:-1].split()
-        flags2 = sflags2[1:-1].split()
+    def flagsdiff(self, flags1, flags2):
         diff = []
         for f1 in flags1:
             if f1 != '\\Recent' and f1 != '\\Deleted' and not f1 in flags2:
