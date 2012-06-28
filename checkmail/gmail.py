@@ -48,7 +48,7 @@ class GmailService(CheckMailService):
         webbrowser.open(urlGmailInbox)
 
     def getNewMsgs(self):
-        url = self.opener.open(urlGmailAtom)
+        url = self.opener.open(urlGmailAtom, timeout=60)
         dom = xml.dom.minidom.parseString(url.read())
         entrys = dom.getElementsByTagName("entry")
         msgs = set()
