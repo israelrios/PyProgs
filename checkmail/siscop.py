@@ -12,6 +12,7 @@ import cookielib
 import datetime
 import dbus
 import commands
+import threading
 
 SEC_HOUR = 60*60 # 1 hora em segundos
 
@@ -60,6 +61,8 @@ class SisCopService(Service):
         self.setIcon(self.check())
 
     def showPage(self, pageId=None):
+        if self != threading.currentThread():
+            return
         """ Mostra a página do SisCop se o pageId for diferente do último. """
         if pageId == None or pageId != self.lastPageId:
             if pageId != None:
