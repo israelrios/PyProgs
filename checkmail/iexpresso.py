@@ -1417,17 +1417,15 @@ class MailSynchronizer():
             # se o usuário cancelar a operação, deleta do banco para que as mensagens sejam restauradas dá próxima vez
             for folder in todelete.keys():
                 if not skipExpresso:
-                    #cuidado! irá excluir permanentemente as mensagens
-                    strids = ','.join([str(eid) for eid in todelete[folder]])
+                    # cuidado! irá excluir permanentemente as mensagens
+                    # quando eid == '' deve ser um import que falhou. Então a mensagem não está no Expresso.
+                    strids = ','.join([str(item.eid) for item in todelete[folder] if item.eid != ''])
                     log( 'Deleting messages from Expresso. Ids: %s   folder: %s' % (strids, folder) )
                     self.es.deleteMsgs(strids, folder)
-                #atualiza o banco, se skipExpresso for True as mensagens serão recarregadas
+                # atualiza o banco, se skipExpresso for True as mensagens serão recarregadas
                 # da próxima vez que houver full refresh
-                for eid in todelete[folder]:
-                    dbid = self.db.getId(eid, folder)
-                    if dbid == None:
-                        raise IExpressoError(_('Error deleting messages from expresso.'))
-                    self.db.delete(dbid)
+                for item in todelete[folder]:
+                    self.db.delete(item.dbid)
 
     def flagMessagesExpresso(self, toflag, newflags):
         # envia os comandos para alterar os flags no expresso
@@ -1451,7 +1449,7 @@ class MailSynchronizer():
                 self.es.createFolder(folder) #cria a pasta no expresso
                 self.db.folders.add(folder)
 
-    class ToMoveItem:
+    class ExMsgItem:
         def __init__(self, dbid, eid):
             self.dbid = dbid
             self.eid = eid
@@ -1498,18 +1496,18 @@ class MailSynchronizer():
             self.newflags = {}
             self.toimport = []
 
-        def move(self, efolder, newfolder, dbid, eid):
+        def move(self, dbid, efolder, newfolder, eid):
             pair = (efolder, newfolder)
             if pair in self.tomove:
-                self.tomove[pair].append(MailSynchronizer.ToMoveItem(dbid, eid))
+                self.tomove[pair].append(MailSynchronizer.ExMsgItem(dbid, eid))
             else:
-                self.tomove[pair] = [MailSynchronizer.ToMoveItem(dbid, eid)]
+                self.tomove[pair] = [MailSynchronizer.ExMsgItem(dbid, eid)]
 
-        def delete(self, efolder, eid):
+        def delete(self, dbid, efolder, eid):
             if efolder in self.todelete:
-                self.todelete[efolder].append(eid)
+                self.todelete[efolder].append(MailSynchronizer.ExMsgItem(dbid, eid))
             else:
-                self.todelete[efolder] = [eid]
+                self.todelete[efolder] = [MailSynchronizer.ExMsgItem(dbid, eid)]
 
     def computeExpressoDiff(self, localdb, doImport = False, doMove = False, doDelete = False):
         #verifica as mensagens que não existem mais na caixa local
@@ -1519,14 +1517,11 @@ class MailSynchronizer():
             for dbid in self.db.getIds():
                 if not localdb.exists(dbid):
                     eid, efolder = self.safeFolderId(localdb, dbid)
-                    if eid == '': # its a failed import?
-                        self.db.delete(dbid)
-                    else:
-                        # por motivos de segurança só deveria excluir da lixeira,
-                        # após algum tempo de teste essa restrição foi removida
-                        exdiff.delete(efolder, eid)
-                        #else:
-                        #    exdiff.move(efolder, 'INBOX/Trash', dbid, eid) #move pra lixeira quando estiver excluída
+                    # por motivos de segurança só deveria excluir da lixeira,
+                    # após algum tempo de teste essa restrição foi removida
+                    exdiff.delete(dbid, efolder, eid)
+                    #else:
+                    #    exdiff.move(efolder, 'INBOX/Trash', dbid, eid) #move pra lixeira quando estiver excluída
 
         for dbid in localdb.getIds():
             _, localfolder, localflags = localdb.get(dbid)
@@ -1538,7 +1533,7 @@ class MailSynchronizer():
                 #move as mensagens que foram movidas
                 if doMove and localfolder != efolder:
                     eid, efolder = self.safeFolderId(localdb, dbid)
-                    exdiff.move(efolder, localfolder, dbid, eid)
+                    exdiff.move(dbid, efolder, localfolder, eid)
 
                 #altera os flags das mensagens lidas e respondidas
                 if localflags != eflags:
