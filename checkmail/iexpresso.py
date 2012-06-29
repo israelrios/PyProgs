@@ -1510,10 +1510,10 @@ class MailSynchronizer():
                 self.todelete[efolder] = [MailSynchronizer.ExMsgItem(dbid, eid)]
 
     def computeExpressoDiff(self, localdb, doImport = False, doMove = False, doDelete = False):
-        #verifica as mensagens que não existem mais na caixa local
         exdiff = self.ExpressoDiff()
 
         if doDelete:
+            #verifica as mensagens que não existem mais na caixa local
             for dbid in self.db.getIds():
                 if not localdb.exists(dbid):
                     eid, efolder = self.safeFolderId(localdb, dbid)
