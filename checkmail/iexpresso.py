@@ -892,7 +892,9 @@ class MsgList():
 #########################################################
 class MailSynchronizer():
     metadataFolder = 'INBOX/_metadata_dont_delete'
-    ignoredFlags = set([r'\Unseen', r'\Recent'])
+    relevantFlags = set([r'\Seen',r'\Answered',r'\Flagged',r'$Forwarded'])
+    allflags = relevantFlags | set([r'\Deleted', r'\Draft'])
+    removableFlags = set([r'\Seen',r'\Flagged'])
 
     def __init__(self):
         if not os.path.exists(iexpressodir):
@@ -1080,8 +1082,7 @@ class MailSynchronizer():
                                 if dbid == None or dbid == '':
                                     raise IExpressoError(_('Error loading local messages.'))
 
-                                flags -= self.ignoredFlags
-                                localdb.add(dbid, localid, '', folder, flags)
+                                localdb.add(dbid, localid, '', folder, flags & self.allflags)
                                 msgcount += 1
                             except:
                                 log( m )
@@ -1167,7 +1168,7 @@ class MailSynchronizer():
                                 checkImapError(typ, resp)
                                 # insert a dummy record that can't be used to update local imap
                                 localdb.setUpdated()
-                            self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+                            self.db.update(dbid, msg.id, folder_id, eflags & self.relevantFlags, msg.hashid)
                             self.unstale(dbid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                 #re-verifica se todas as mensagens foram baixadas
@@ -1305,27 +1306,23 @@ class MailSynchronizer():
                 hashid = edb.getHashId(dbid)
                 if not localdb.exists(dbid):
                     # atualiza o banco
-                    self.db.update(dbid, eid, efolder, eflags, hashid)
+                    self.db.update(dbid, eid, efolder, eflags & self.relevantFlags, hashid)
                     self.unstale(dbid)
                     continue # deve ser uma mensagem excluída localmente
 
                 localid, localfolder, localflags = localdb.get(dbid)
                 dbfolder, dbflags = self.db.get(dbid)[1:3]
                 if eflags != dbflags and eflags != localflags:
-                    diff = self.flagsdiff(eflags, dbflags)
-                    if len(diff) > 0:
+                    diff = FlagsDiff(eflags, dbflags, self.relevantFlags, self.removableFlags)
+                    if not diff.isEmpty():
                         self.client.select(localfolder.encode('imap4-utf-7'), False)
                         # NOTE: forwarded não pode ser representando no bincimap (sem as alterações realizadas por mim)
-                        log( 'Update local flag. Id: %d   folder: %s   flags: %s  localflags: %s'
-                                % (localid, localfolder, str(' '.join(diff)), ' '.join(localflags)) )
-                        if r'\Unseen' in diff:
-                            del diff[diff.index(r'\Unseen')]
-                            self.client.store(str(localid), '-FLAGS', r'\Seen')
-                        if r'\Unflagged' in diff:
-                            del diff[diff.index(r'\Unflagged')]
-                            self.client.store(str(localid), '-FLAGS', r'\Flagged')
-                        if len(diff) > 0:
-                            self.client.store(str(localid), '+FLAGS', ' '.join(diff))
+                        log( 'Update local flag. Id: %d   folder: %s   +flags: %s  -flags: %s  localflags: %s'
+                                % (localid, localfolder, ' '.join(diff.added), ' '.join(diff.removed), ' '.join(localflags)) )
+                        if len(diff.removed) > 0:
+                            self.client.store(str(localid), '-FLAGS', ' '.join(diff.removed))
+                        if len(diff.added) > 0:
+                            self.client.store(str(localid), '+FLAGS', ' '.join(diff.added))
                         localdb.setUpdated()
                         self.closeLocalFolder()
                 if efolder != dbfolder and efolder != localfolder:
@@ -1337,7 +1334,7 @@ class MailSynchronizer():
                     self.client.copy(str(localid), efolder.encode('imap4-utf-7'))
                     localdb.setUpdated()
                 # atualiza o banco
-                self.db.update(dbid, eid, efolder, eflags, hashid)
+                self.db.update(dbid, eid, efolder, eflags & self.relevantFlags, hashid)
                 self.unstale(dbid)
 
         # exclui as mensagens e faz expunge da pasta
@@ -1400,7 +1397,7 @@ class MailSynchronizer():
             self.es.importMsgWithTime(folder, msgheader + msgbody, date, flagset)
 
             self.staleMsgs[dbid] = folder
-            self.db.update(dbid, '', folder, localflags, '')
+            self.db.update(dbid, '', folder, localflags & self.relevantFlags, '')
 
         self.closeLocalFolder()
 
@@ -1438,7 +1435,7 @@ class MailSynchronizer():
                     for eid in msgs:
                         dbid = self.db.getId(eid, folder)
                         if dbid != None and dbid in newflags:
-                            self.db.update(dbid, eid, folder, newflags[dbid]) # atualiza o banco
+                            self.db.update(dbid, eid, folder, newflags[dbid] & self.relevantFlags) # atualiza o banco
                         else:
                             log("Message not found:", eid, folder, dbid, ' '.join(newflags))
 
@@ -1537,8 +1534,8 @@ class MailSynchronizer():
 
                 #altera os flags das mensagens lidas e respondidas
                 if localflags != eflags:
-                    fdiff = self.flagsdiff(localflags, eflags)
-                    if len(fdiff) > 0:
+                    fdiff = FlagsDiff(localflags, eflags, self.relevantFlags, self.removableFlags)
+                    if not fdiff.isEmpty():
                         eid, efolder = self.safeFolderId(localdb, dbid)
                         exdiff.newflags[dbid] = self.mapFlagsExpresso(exdiff.toflag, eid, efolder, eflags, fdiff)
             elif doImport:
@@ -1548,45 +1545,27 @@ class MailSynchronizer():
         return exdiff
 
     def mapFlagsExpresso(self, toflag, eid, efolder, eflags, diff):
-        newflags = set(eflags)
+        newflags = (eflags - diff.removed) | diff.added
         if efolder in toflag:
             flags = toflag[efolder]
         else:
             flags = {'seen': [], 'unseen': [], 'answered': [], 'forwarded': [], 'flagged': [], 'unflagged': []}
             toflag[efolder] = flags
-        if r'\Seen' in diff:
-            flags['seen'].append(eid)
-            newflags.add(r'\Seen')
-        if r'\Unseen' in diff:
-            flags['unseen'].append(eid)
-            if r'\Seen' in newflags:
-                newflags.remove(r'\Seen')
-        if r'\Answered' in diff:
-            flags['answered'].append(eid)
-            newflags.add(r'\Answered')
-        if r'\Flagged' in diff:
-            flags['flagged'].append(eid)
-            newflags.add(r'\Flagged')
-        if r'\Unflagged' in diff:
-            flags['unflagged'].append(eid)
-            if r'\Flagged' in newflags:
-                newflags.remove(r'\Flagged')
-        if r'$Forwarded' in diff:
-            flags['forwarded'].append(eid)
-            newflags.add(r'$Forwarded')
+
+        for flag in diff.added:
+            flags[flag[1:].lower()].append(eid)
+        for flag in diff.removed:
+            flags['un' + flag[1:].lower()].append(eid)
+
         return newflags
 
-    def flagsdiff(self, flags1, flags2):
-        diff = []
-        for f1 in flags1:
-            if f1 != '\\Recent' and f1 != '\\Deleted' and not f1 in flags2:
-                diff.append(f1)
-        if r'\Seen' in flags2 and not r'\Seen' in flags1:
-            diff.append(r'\Unseen')
-        if r'\Flagged' in flags2 and not r'\Flagged' in flags1:
-            diff.append(r'\Unflagged')
-        return diff
-
+class FlagsDiff:
+    def __init__(self, flags1, flags2, insertable, removable):
+        self.removed = (flags2 & removable) - flags1
+        self.added = (flags1 & insertable) - flags2
+    
+    def isEmpty(self):
+        return len(self.added) == 0 and len(self.removed) == 0
 
 def getFolderPath(imapfolder):
     p1 = imapfolder.rindex('"', 0)
