@@ -38,7 +38,7 @@ class SisCopTrayIcon(TrayIcon):
 
 
 class SisCopService(Service):
-    urlSisCop = 'http://siscop.portalcorporativo.serpro/cpf_senha.asp'
+    urlSisCop = 'http://siscop.portalcorporativo.serpro/cpf_senha.asp?action=sem_saver'
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
         # Os campos do formulário
@@ -61,7 +61,7 @@ class SisCopService(Service):
         self.setIcon(self.check())
 
     def showPage(self, pageId=None):
-        if self != threading.currentThread():
+        if pageId != None and self != threading.currentThread():
             return
         """ Mostra a página do SisCop se o pageId for diferente do último. """
         if pageId == None or pageId != self.lastPageId:
@@ -84,10 +84,20 @@ class SisCopService(Service):
         except:
             pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
 
+    def decodeCaptcha(self):
+        # decodifica o captcha, são sempre 5 dígitos.
+        digitsizemap = {237:'0', 134:'1', 220:'2', 253:'3', 234:'4', 249:'5', 263:'6', 147:'7', 248:'8', 259:'9'}
+        digits = []
+        for i in range(1, 6):
+            url = self.opener.open('http://siscop.portalcorporativo.serpro/captcha.asp?captchaID=' + str(i))
+            digits.append(digitsizemap[len(url.read())])
+        return ''.join(digits)
+
     def getPageText(self):
         """ Faz o login no SISCOP. Download da página de registro de ponto. Extrai o texto do HTML da página. """
         try:
             url = self.opener.open(self.urlSisCop)
+            self.fields['tx_captcha'] = self.decodeCaptcha()
             url = self.opener.open(self.urlSisCop, urllib.urlencode(self.fields))
         except Exception, e:
             raise Exception(u"It was not possible to connect at SisCop. Error:\n\n" + str(e))
