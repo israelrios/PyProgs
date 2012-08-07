@@ -39,6 +39,7 @@ class SisCopTrayIcon(TrayIcon):
 
 class SisCopService(Service):
     urlSisCop = 'http://siscop.portalcorporativo.serpro/cpf_senha.asp?action=sem_saver'
+    urlCaptcha = 'http://siscop.portalcorporativo.serpro/captcha.asp?captchaID='
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
         # Os campos do formulário
@@ -86,11 +87,11 @@ class SisCopService(Service):
 
     def decodeCaptcha(self):
         # decodifica o captcha, são sempre 5 dígitos.
-        digitsizemap = {237:'0', 134:'1', 220:'2', 253:'3', 234:'4', 249:'5', 263:'6', 147:'7', 248:'8', 259:'9'}
+        sizeToDigit = {237:'0', 134:'1', 220:'2', 253:'3', 234:'4', 249:'5', 263:'6', 147:'7', 248:'8', 259:'9'}
         digits = []
         for i in range(1, 6):
-            url = self.opener.open('http://siscop.portalcorporativo.serpro/captcha.asp?captchaID=' + str(i))
-            digits.append(digitsizemap[len(url.read())])
+            url = self.opener.open(self.urlCaptcha + str(i))
+            digits.append(sizeToDigit[len(url.read())])
         return ''.join(digits)
 
     def getPageText(self):
