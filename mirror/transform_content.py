@@ -22,8 +22,6 @@ __author__ = "Israel Rios (isrrios@gmail.com)"
 import os
 import re
 import urlparse
-import urllib
-import logging
 
 ################################################################################
 
@@ -125,14 +123,14 @@ def transformUrl(mo, replacement, urltype, base_url, accessed_dir):
     return mo.expand(replacement % url.replace('\\', '\\\\'))
 
 def TransformContent(base_url, accessed_url, content):
-  url_obj = urlparse.urlparse(accessed_url)
-  accessed_dir = os.path.dirname(url_obj.path)
-  if not accessed_dir.endswith("/"):
-    accessed_dir += "/"
+    url_obj = urlparse.urlparse(accessed_url)
+    accessed_dir = os.path.dirname(url_obj.path)
+    if not accessed_dir.endswith("/"):
+        accessed_dir += "/"
 
-  for pattern, replacement, urltype in REPLACEMENT_REGEXES:
-    content = re.sub(pattern, lambda mo: transformUrl(mo, replacement, urltype, base_url, accessed_dir), content)
-  return content
+    for pattern, replacement, urltype in REPLACEMENT_REGEXES:
+        content = re.sub(pattern, lambda mo: transformUrl(mo, replacement, urltype, base_url, accessed_dir), content)
+    return content
 
 #test
 if __name__ == "__main__":
