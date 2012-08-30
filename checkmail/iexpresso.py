@@ -5,7 +5,7 @@
 
 import imap4utf7 # pro codec imap4-utf-7 @UnusedImport
 
-from monutil import decode_header, MultipartPostHandler
+from monutil import decode_header, MultipartPostHandler, decode_htmlentities
 
 import sys
 import urllib
@@ -18,7 +18,6 @@ import zipfile
 import time, random
 import traceback
 #import cPickle
-from htmlentitydefs import name2codepoint as n2cp
 from cStringIO import StringIO
 from StringIO import StringIO as pyStringIO
 
@@ -67,24 +66,6 @@ def compressLog():
         finally:
             zf.close()
         os.remove(logfile)
-
-###################################
-# Response parser functions
-def substitute_entity(match):
-    ent = match.group(2)
-    if match.group(1) == "#":
-        return unichr(int(ent))
-    else:
-        cp = n2cp.get(ent)
-
-        if cp:
-            return unichr(cp)
-        else:
-            return match.group()
-
-def decode_htmlentities(string):
-    entity_re = re.compile("&(#?)(\d{1,5}|\w{1,8});")
-    return entity_re.subn(substitute_entity, string)[0]
 
 # Portei este código do arquivo connector.js do expresso.
 def matchBracket(text, iniPos):

@@ -46,10 +46,13 @@ class TrayIcon(gtk.StatusIcon):
         mi.connect('activate', handler)
         return mi
 
-    def onPopupMenu(self, status_icon, button, activate_time):
-        menu = gtk.Menu()
+    def prepareMenu(self, menu):
         menu.append(self.createMenuItem(gtk.STOCK_QUIT, self.onMenuExit))
         menu.append(self.createMenuItem(gtk.STOCK_REFRESH, self.onMenuRefresh))
+
+    def onPopupMenu(self, status_icon, button, activate_time):
+        menu = gtk.Menu()
+        self.prepareMenu(menu)
         menu.show_all()
         menu.popup(None, None, None, button, activate_time)
 
