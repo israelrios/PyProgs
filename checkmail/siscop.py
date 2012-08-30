@@ -57,6 +57,11 @@ class SisCopTrayIcon(TrayIcon):
         self.set_visible(True)
 
 
+class NotLoggedException(Exception):
+    def __init__(self):
+        Exception.__init__(self, u"Login required.")
+
+
 class SisCopService(Service):
     urlSisCop = 'http://siscop.portalcorporativo.serpro'
     urlLogin = urlSisCop + '/cpf_senha.asp'
@@ -162,7 +167,7 @@ class SisCopService(Service):
 
         self.checkLogged(url)
         if not self.logged:
-            raise Exception(u"Login required.")
+            raise NotLoggedException()
 
         #Extraí as linhas de interese e remove as tags HTML
         start = end = -1
@@ -216,7 +221,10 @@ class SisCopService(Service):
         self.refreshMinutes = 5
         if not self.login():
             return NOT_LOGGED
-        text = self.getPageText()
+        try:
+            text = self.getPageText()
+        except NotLoggedException:
+            return NOT_LOGGED
 
         self.timeReturn = None
 
