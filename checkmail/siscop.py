@@ -124,12 +124,14 @@ class SisCopService(Service):
                 execute(["wmctrl", "-a", "Firefox"])
 
         #verifica se o usuário está na máquina
-        bus = dbus.SessionBus()
-        ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
-        try:
-            ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
-        except:
-            pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
+        if pageId != None:
+            bus = dbus.SessionBus()
+            ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
+            try:
+                # costuma demorar alguns segundos pra retornar
+                ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
+            except:
+                pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
 
     def decodeCaptcha(self):
         if self.decodingCaptcha:
@@ -361,13 +363,13 @@ class CaptchaWindow(gtk.Window):
         self.set_icon_from_file(os.path.join(curdir, 'siscop_idle.png'))
         gtk.Window.show(self)
 
-    def cancel(self, param):
+    def cancel(self, wnd):
         self.destroy()
 
     def run(self):
         self.show()
 
-    def login(self, param):
+    def login(self, wnd):
         captcha = self.value.get_text().strip()
         if len(captcha) == 0:
             showMessage(_(u"Captcha value is required."), self.get_title(), self)
