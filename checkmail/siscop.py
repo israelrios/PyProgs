@@ -91,7 +91,7 @@ class SisCopService(Service):
         return SisCopTrayIcon(self)
 
     def runService(self, timered=True):
-        #o valor de refreshMinutos pode ser alterado em self.check()
+        # o valor de refreshMinutes pode ser alterado em self.check()
         status = self.check()
         if status == NOT_LOGGED and not timered:
             gobject.idle_add(self.decodeCaptcha)
