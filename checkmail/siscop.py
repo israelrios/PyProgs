@@ -74,8 +74,9 @@ class SisCopService(Service):
         self.fields['tx_cpf'] = user
         self.fields['tx_senha'] = passwd
         #Inicialização
-        self.opener = self.buildOpener()
+        self.opener, self.cookiejar = self.buildOpener()
         self.tempOpener = None
+        self.tempCookiejar = None
         #Atualiza a cada 5min
         self.refreshMinutes = 5
         self.lastPageId = None
@@ -84,8 +85,8 @@ class SisCopService(Service):
         self.decodingCaptcha = False
 
     def buildOpener(self):
-        cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
-        return urllib2.build_opener(urllib2.HTTPCookieProcessor(cookies))
+        cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
+        return (urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar)), cookiejar)
 
     def createTrayIcon(self):
         return SisCopTrayIcon(self)
@@ -107,7 +108,16 @@ class SisCopService(Service):
             #abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
             if 'chrome' in procs:
-                execute(["google-chrome", self.urlLogin])
+                if self.logged:
+                    # passa os cookies para o browser para evitar a tela de login
+                    url = self.urlCadRegPonto + "?"
+                    cookies = []
+                    for cookie in self.cookiejar:
+                        cookies.append("%s=%s" % (cookie.name, cookie.value))
+                    url = url + urllib.urlencode({'cookie': '; '.join(cookies)})
+                else:
+                    url = self.urlLogin
+                execute(["google-chrome", url])
                 execute(["wmctrl", "-a", "Chrome"])
             else:
                 execute(["firefox", self.urlLogin])
@@ -124,7 +134,7 @@ class SisCopService(Service):
     def decodeCaptcha(self):
         if self.decodingCaptcha:
             return
-        self.tempOpener = self.buildOpener()
+        self.tempOpener, self.tempCookiejar = self.buildOpener()
         html = self.tempOpener.open(self.urlLogin).read()
         # get the viewstate value
         mo = re.search(r"<input[^>]+id\s*=\s*['\"]?viewstate['\"]?[^>]+value\s*=\s*'([^']+)'", html, re.DOTALL)
@@ -152,9 +162,11 @@ class SisCopService(Service):
         if self.captchaValue == None:
             return False
         self.opener = self.tempOpener
+        self.cookiejar = self.tempCookiejar
         self.fields['captcha'] = self.captchaValue
         self.captchaValue = None
         self.tempOpener = None
+        self.tempCookiejar = None
         url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
         return self.checkLogged(url)
 
