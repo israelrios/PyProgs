@@ -86,7 +86,9 @@ class SisCopService(Service):
 
     def buildOpener(self):
         cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
-        return (urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar)), cookiejar)
+        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar))
+        opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.81 Safari/537.1')]
+        return (opener, cookiejar)
 
     def createTrayIcon(self):
         return SisCopTrayIcon(self)
@@ -143,7 +145,7 @@ class SisCopService(Service):
         self.fields['viewstate'] = decode_htmlentities(mo.group(1))
         # get the captcha image url
         mo = re.search(r"src\s*=\s*'(/captcha/[^']+)'", html, re.DOTALL)
-        fname = os.path.join(tempfile.gettempdir(), "siscop.captcha.jpg")
+        fname = os.path.join(tempfile.gettempdir(), "siscop{0}.captcha.jpg".format(self.user))
         with open(fname, 'w') as f:
             f.write(self.tempOpener.open(self.urlSisCop + decode_htmlentities(mo.group(1))).read())
         self.decodingCaptcha = True
