@@ -17,6 +17,7 @@ import gtk
 import re
 import tempfile
 import gobject
+import sys
 
 SEC_HOUR = 60*60 # 1 hora em segundos
 
@@ -159,6 +160,12 @@ class SisCopService(Service):
     def checkLogged(self, url):
         self.logged = not url.geturl().startswith(self.urlLogin)
         return self.logged
+    
+    def saveCookies(self):
+        cookiesFileName = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.siscop_cookies')
+        with open(cookiesFileName, 'w') as f:
+            for cookie in self.cookiejar:
+                f.write("%s=%s\n" % (cookie.name, cookie.value))
 
     def login(self):
         if self.logged:
@@ -172,7 +179,9 @@ class SisCopService(Service):
         self.tempOpener = None
         self.tempCookiejar = None
         url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
-        return self.checkLogged(url)
+        if self.checkLogged(url):
+            self.saveCookies()
+        return self.logged
 
     def getPageText(self):
         """ Faz o login no SISCOP. Download da página de registro de ponto. Extrai o texto do HTML da página. """
