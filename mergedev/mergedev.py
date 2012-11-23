@@ -376,6 +376,7 @@ class MergeDev:
                     #self.mergeFileByRev(filename, rev);
                     i += 1
                 i += 1
+            filename = filename.replace('/Attic/', '/')
             revs.sort()
             irev = 0;
             while irev < len(revs):
