@@ -305,28 +305,28 @@ class ExpressoManager:
             params = None
         #log( surl )
         sessionid = self._getCookie("TINE20SESSID")
-        url = self.opener.open(surl, params)
+        response = self.opener.open(surl, params)
         # reconnects when the session id changes
         if self.logged and sessionid != self._getCookie("TINE20SESSID"):
             self.logged = False
             raise SessionExpiredError()
-        return url
+        return response
 
-    def _checkRemoteError(self, resp):
-        if hasattr(resp, "error"):
-            log("* Error:", resp.error.message)
+    def _checkRemoteError(self, ret):
+        if hasattr(ret, "error"):
+            log("* Error:", ret.error.message)
             errcode = None
-            if resp.error.data != None:
-                errcode = resp.error.data.code
+            if ret.error.data != None:
+                errcode = ret.error.data.code
 
                 if errcode == 401: # Not Authorised
                     raise SessionExpiredError()
 
-                log(' Code:', resp.error.data.code)
-                for trace in resp.error.data.trace:
+                log(' Code:', ret.error.data.code)
+                for trace in ret.error.data.trace:
                     if hasattr(trace, "file"):
                         log(' ', trace.file, trace.line, trace.function)
-            raise RemoteError(resp.error.message, errcode)
+            raise RemoteError(ret.error.message, errcode)
 
     def _callExpresso(self, method, *params):
         self.callid += 1
@@ -336,28 +336,28 @@ class ExpressoManager:
         req = urllib2.Request(self.urlIndex, json.dumps(obj, sort_keys=False, default=json_default), headers=headers)
         if not 'login' in method:
             print method, params
-        url = self.openUrl(req, None, True)
-        resp = unserialize(url.read())
-        url.close()
-        self._checkRemoteError(resp)
-        return resp.result
+        response = self.openUrl(req, None, True)
+        ret = unserialize(response.read())
+        response.close()
+        self._checkRemoteError(ret)
+        return ret.result
 
     def login(self):
         success = False
         try:
             self._reset()
-            url = self.opener.open(self.urlExpresso)
-            url.read()
-            url.close()
+            response = self.opener.open(self.urlExpresso)
+            response.read()
+            response.close()
             # login($username, $password, $securitycode=NULL)
-            resp = self.callExpresso('Tinebase.login', self.user, self.passwd, '')
-            success = resp.success
+            ret = self.callExpresso('Tinebase.login', self.user, self.passwd, '')
+            success = ret.success
             if success:
-                self.jsonKey = resp.jsonKey
-                self.userAccount = resp.account
-                resp = self.callExpresso("Felamimail.getRegistryData");
-                self.account = resp.accounts.results[0]
-                self.supportedFlags = set([flag.id for flag in resp.supportedFlags.results])
+                self.jsonKey = ret.jsonKey
+                self.userAccount = ret.account
+                ret = self.callExpresso("Felamimail.getRegistryData");
+                self.account = ret.accounts.results[0]
+                self.supportedFlags = set([flag.id for flag in ret.supportedFlags.results])
         except Exception as e:
             raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + unicode(e))
         finally:
@@ -392,17 +392,17 @@ class ExpressoManager:
 
     def _listFoldersRec(self, parent):
         try:
-            resp = self._callSearchFolders(parent)
+            ret = self._callSearchFolders(parent)
         except RemoteError as e:
             if u'cannot change folder' in unicode(e):
                 log( u"Error listing folders. Reconnecting... " )
                 self.logout()
                 time.sleep(10) # waits 10 seconds
                 self.login()
-                resp = self._callSearchFolders(parent)
+                ret = self._callSearchFolders(parent)
             else:
                 raise
-        for folder in resp.results:
+        for folder in ret.results:
             self.foldermap[folder.globalname] = folder
             if folder.has_children:
                 self._listFoldersRec(folder.globalname)
@@ -421,20 +421,20 @@ class ExpressoManager:
 
     def getFullMsgs(self, msgsid):
         # downloadMessage($messageId)
-        url = self.openUrl(self.urlIndex, {"method": "Felamimail.downloadMessage", "requestType": "HTTP",
+        response = self.openUrl(self.urlIndex, {"method": "Felamimail.downloadMessage", "requestType": "HTTP",
                                            "messageId": joinstr(msgsid)}, True)
-        filename = url.info()['Content-Disposition'].split("=")[1].strip('"')
+        filename = response.info()['Content-Disposition'].split("=")[1].strip('"')
 
         msgs = {}
 
         if filename.lower().endswith('.eml'):
-            source = url.read()
+            source = response.read()
             if "From:" in source:
                 msgs[filename[: -4]] = source
             return msgs
 
         try:
-            zfile = zipfile.ZipFile(StringIO(url.read()))
+            zfile = zipfile.ZipFile(StringIO(response.read()))
             for name in zfile.namelist():
                 # formato do nome ID.eml, extraí o ID do nome do arquivo
                 source = str(zfile.read(name)) # a codificação das mensagens é ASCII
@@ -446,7 +446,7 @@ class ExpressoManager:
             log( "Error downloading full messages." )
             return None
         finally:
-            url.close()
+            response.close()
         return msgs
 
     def importMsg(self, msgfolder, source):
@@ -455,14 +455,14 @@ class ExpressoManager:
         headers = {'X-File-Name': "email.eml", 'X-File-Size': len(source), 'X-File-Type': 'message/rfc822',
                    'X-Requested-With': 'XMLHttpRequest', 'X-Tine20-Request-Type': 'HTTP'}
         req = urllib2.Request(self.urlUpload, source, headers=headers)
-        url = self.openUrl(req, None, True)
-        resp = unserialize(url.read())
+        response = self.openUrl(req, None, True)
+        ret = unserialize(response.read())
         # verifica se aconteceu algum erro
-        if resp.status != 'success':
-            log(resp.__dict__)
+        if ret.status != 'success':
+            log(ret.__dict__)
             raise Exception(_("Import failed."))
         # importMessage($accountId,$folderId, $file)
-        resp = self.callExpresso("Felamimail.importMessage", self.account.id, self.foldermap[msgfolder].id, resp.tempFile.path)
+        ret = self.callExpresso("Felamimail.importMessage", self.account.id, self.foldermap[msgfolder].id, ret.tempFile.path)
 
     def _makeExpressoFlags(self, flags):
         return replaceinset(set(flags), '$Forwarded', 'Passed') & self.supportedFlags
@@ -502,14 +502,14 @@ class ExpressoManager:
         start = 0
         while True:
             # searchMessages($filter, $paging)
-            resp = self.callExpresso("Felamimail.searchMessages", filterParam, {"sort":"received", "dir":"DESC", "start":start, "limit":limit})
+            ret = self.callExpresso("Felamimail.searchMessages", filterParam, {"sort":"received", "dir":"DESC", "start":start, "limit":limit})
 
-            for msg in resp.results:
+            for msg in ret.results:
                 msg.flags = replaceinset(set(msg.flags), 'Passed', '$Forwarded')
                 msg.hashid = self.calcHashId(msg)
                 msgs.append(msg)
 
-            if len(resp.results) < limit:
+            if len(ret.results) < limit:
                 break
             start += limit
 
@@ -545,8 +545,8 @@ class ExpressoManager:
 
     def autoClean(self):
         # deleteMsgsBeforeDate($accountId)
-        resp = self.callExpresso("Felamimail.deleteMsgsBeforeDate", self.account.id)
-        log( "AutoClean response:", resp.msgs )
+        ret = self.callExpresso("Felamimail.deleteMsgsBeforeDate", self.account.id)
+        log( "AutoClean response:", ret.msgs )
 
 
 ##################################################
