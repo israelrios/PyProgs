@@ -5,7 +5,7 @@
 
 import imap4utf7 # pro codec imap4-utf-7 @UnusedImport
 
-from monutil import decode_header, MultipartPostHandler, decode_htmlentities
+from monutil import decode_header, MultipartPostHandler
 
 import sys
 import urllib
@@ -17,13 +17,10 @@ import datetime
 import zipfile
 import time, random
 import traceback
-#import cPickle
+import simplejson as json
 from cStringIO import StringIO
-from StringIO import StringIO as pyStringIO
 
-from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import email.utils
 import email.header
 from email.generator import Generator as EmailGenerator
 
@@ -67,87 +64,23 @@ def compressLog():
             zf.close()
         os.remove(logfile)
 
-# Portei este código do arquivo connector.js do expresso.
-def matchBracket(text, iniPos):
-    nClose = iniPos
-    while True:
-        nOpen = text.find('{', nClose+1)
-        nClose = text.find('}', nClose+1)
-        if (nOpen == -1):
-            return nClose
-
-        if (nOpen < nClose ):
-            nClose = matchBracket(text, nOpen)
-
-        if (nOpen >= nClose):
-            return nClose
-
 ###########################################################
-# Faz o parse da resposta do expresso. Portei este código do arquivo connector.js do expresso.
+# Faz o parse da resposta do expresso.
 # Formato:
-#   a:n:{s:n:"";i:k;};
+#   json
 #   Saída: dicionário com os valores
 def unserialize(text):
-    itemtype = text[0]
-    if itemtype == 'a':
-        n = int( text[text.index(':')+1 : text.index(':',2)] )
-        arrayContent = text[text.index('{')+1 : text.rindex('}')]
+    class JSONObj:
+        def __init__(self, entries):
+            self.__dict__.update(entries)
 
-        data = {}
-        for _ in range(n):
-            pos = 0
+    return json.loads(text.decode('utf-8'), object_hook=lambda x: JSONObj(x))
 
-            #/* Process Index */
-            indexStr = arrayContent[ : arrayContent.index(';')+1]
-            index = unserialize(indexStr)
+def json_default(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    return obj
 
-            pos = arrayContent.index(';', pos)+1
-
-            #/* Process Content */
-            subtype = arrayContent[pos]
-            if subtype == 'a':
-                endpos = matchBracket(arrayContent, arrayContent.index('{', pos))+1
-                part = arrayContent[pos: endpos]
-                pos = endpos
-                data[index] = unserialize(part)
-
-            elif subtype == 's':
-                pval = arrayContent.index(':', pos+2)
-                val  = int(arrayContent[pos+2 : pval])
-                pos = pval + val + 4
-                data[index] = arrayContent[pval+2 : pval + 2 + val]
-
-            else:
-                endpos = arrayContent.index(';', pos)+1
-                part = arrayContent[pos : endpos]
-                pos = endpos
-                data[index] = unserialize(part)
-            arrayContent = arrayContent[pos:]
-
-    elif itemtype == 's':
-        pos = text.index(':', 2)
-        val = int(text[2 : pos])
-        data = text[pos+2 : pos + 2 + val]
-        #text = text[pos + 4 + val : ]
-
-    elif itemtype == 'i' or itemtype == 'd':
-        pos = text.index(';')
-        data = int(text[2  : pos])
-        #text = text[pos + 1 : ]
-
-    elif itemtype == 'N':
-        data = None
-        #text = text[text.index(';') + 1 : ]
-
-    elif itemtype == 'b':
-        if text[2] == '1':
-            data = True
-        else:
-            data = False
-    else:
-        raise Exception(_('Invalid response format from Expresso.'))
-
-    return data
 
 ###########################################
 # EMAIL Message Helpers
@@ -285,14 +218,26 @@ def checkImapError(typ, resp):
         else:
             raise Exception(_('Bad response.'))
 
+def joinstr(lst):
+    return ','.join([str(i) for i in lst])
 
-class NamedStringIO(pyStringIO):
-    def __init__(self, name, buf = None):
-        self.name = name
-        pyStringIO.__init__(self, buf)
+def replaceinset(_set, find, rep):
+    if find in _set:
+        _set.remove(find)
+        _set.add(rep)
+    return _set
 
 class IExpressoError(Exception):
     pass
+
+class RemoteError(Exception):
+    def __init__(self, msg, code):
+        Exception.__init__(self, msg)
+        self.code = code
+
+class SessionExpiredError(IExpressoError):
+    def __init__(self):
+        IExpressoError.__init__(self, _(u"Session Expired."))
 
 class LoginError(IExpressoError):
     '''
@@ -300,206 +245,57 @@ class LoginError(IExpressoError):
     '''
     pass
 
-# expresso msg fields:
-# ContentType: string
-# smalldate: string(dd/mm/yyyy)
-# msg_number: number
-# Importance: flag
-# timestamp: date in seconds
-# msg_sample: dict {body : string}
-# udate: date in seconds
-# subject: string
-# Answered: flag
-# Size: string
-# Draft: flag
-# attachment: dict{names: string, number_attachments: number}
-# Unseen: flag
-# from: dict {name : string, email: string},
-# Deleted: flag
-# Flagged: flag
-# to: dict {name: string, email: string}
-# Recent: flag
-
-def makeEmailDesc(person):
-    return '%s <%s>' % (email.utils.quote(decode_htmlentities(person['name'] or '')), person['email'] or '')
-
-class ExpressoMessage:
-    def checkFlag(self, flag):
-        if isinstance(flag, bool):
-            return flag
-        return flag.strip() != ''
-
-    def __init__(self, values):
-        try:
-            if 'ContentType' in values:
-                self.contentType = values['ContentType']
-            else:
-                self.contentType = 'normal'
-            if 'msg_day' in values:
-                self.date = datetime.datetime.strptime(values['msg_day'] + values['msg_hour'], '%d/%m/%Y%H:%M')
-            elif 'timestamp' in values:
-                self.date = datetime.datetime.utcfromtimestamp(values['timestamp'])
-            else:
-                self.date = datetime.datetime.strptime(values['smalldate'], '%d/%m/%Y')
-            if 'body' in values:
-                self.full = True
-                self.body = values['body']
-            else:
-                self.full = False
-                if 'msg_sample' in values:
-                    self.body = values['msg_sample']['body'][3:] # retira o " - " do começo
-                else:
-                    self.body = ''
-            self.id = values['msg_number']
-            self.subject = values['subject'].replace('\n', ' ')
-            # este while é pra corrigir um bug do expresso que coloca html entities no subject indevidamente
-            while True:
-                newsubj = decode_htmlentities(self.subject)
-                if newsubj == self.subject:
-                    break
-                self.subject = newsubj
-            self.size = int(values['Size'])
-            self.draft = 'Draft' in values and self.checkFlag(values['Draft'])
-            self.answered = 'Answered' in values and self.checkFlag(values['Answered'])
-            self.unread = self.checkFlag(values['Unseen']) or values['Recent'] == 'N'
-            self.deleted = self.checkFlag(values['Deleted'])
-            self.forwarded = 'Forwarded' in values and self.checkFlag(values['Forwarded'])
-            #if self.full:
-            #    log( values['Flagged'] )
-            #    self.flagged = values['Flagged']
-            #else:
-            self.flagged = self.checkFlag(values['Flagged'])
-            self.star = self.flagged
-            self.recent = self.checkFlag(values['Recent'])
-
-            if 'from' in values:
-                self.sfrom = makeEmailDesc(values['from'])
-            else:
-                self.sfrom = ''
-            if 'toaddress2' in values:
-                self.to = decode_htmlentities(values['toaddress2'])
-            else:
-                self.to = makeEmailDesc(values['to'])
-
-            if 'attachment' in values and values['attachment']['number_attachments'] > 0:
-                self.attachmentNames = values['attachment']['names']
-            else:
-                self.attachmentNames = ''
-
-            if 'cc' in values:
-                self.cc = values['cc']
-            else:
-                self.cc = ''
-
-            self.hashid = self.calcHashId()
-        except:
-            log( values )
-            raise
-
-    def calcHashId(self):
-        m = hashlib.md5()
-        m.update(self.contentType + '@')
-        m.update(self.date.isoformat() + '@')
-        m.update(self.sfrom.encode('utf-8') + '@')
-        m.update(self.to.encode('utf-8') + '@')
-        m.update(self.subject.encode('utf-8') + '@')
-        m.update(self.body.encode('utf-8') + '@')
-        m.update(self.attachmentNames.encode('utf-8') + '@')
-        m.update(str(self.size))
-        return m.hexdigest()
-
-    def getFlags(self):
-        flags = set()
-        if self.answered:
-            flags.add(r'\Answered')
-        if not self.unread:
-            flags.add(r'\Seen')
-        if self.deleted:
-            flags.add(r'\Deleted')
-        if self.draft:
-            flags.add(r'\Draft')
-        if self.flagged:
-            flags.add(r'\Flagged')
-        if self.forwarded:
-            flags.add(r'$Forwarded')
-        return flags
-
-    def createMimeMessage(self, dbid = None):
-        # Create the container (outer) email message.
-        msg = MIMEMultipart()
-        #msg = MIMEText(self.body.encode('iso-8859-1'), 'html', 'iso-8859-1')
-        msg['Subject'] = self.subject
-        msg['From'] = self.sfrom
-        msg['To'] = self.to
-        if self.cc != '':
-            msg['CC'] = self.cc
-        if dbid != None:
-            msg['DB-ID'] = str(dbid)
-        #msg['Delivered-To'] = 'israel.rios@sepro.gov.br'
-        #msg['Message-ID'] = str(self.id) + "@localhost"
-        #msg.preamble = 'This is a multi-part message in MIME format.'
-
-        #msg['Received'] = 'by 10.100.4.16 with HTTP; Wed, 4 Nov 2009 02:16:20 -0800 (PST)'
-        msg['Date'] = email.utils.formatdate(time.mktime(self.date.timetuple()), True)
-        # TODO: Adicionar os anexos
-        #for file in pngfiles:
-        #    fp = open(file, 'rb')
-        #    img = MIMEBase(fp.read())
-        #    fp.close()
-        #    msg.attach(img)
-        text = MIMEText(self.body.encode('utf-8'), 'html', 'UTF-8')
-
-        msg.attach(text)
-
-        #log( str(msg) )
-
-        return str(msg)
-
-
 class ExpressoManager:
-    urlExpresso = 'https://expresso.serpro.gov.br/'
-    urlLogin = urlExpresso + 'login.php'
-    urlIndex = urlExpresso + 'expressoMail1_2/index.php'
-    urlController = urlExpresso + 'expressoMail1_2/controller.php'
-    urlAction = urlController + '?action=$this.'
-    urlImapFunc = urlAction + 'imap_functions.'
-    urlCheck = urlImapFunc + 'get_range_msgs2&msg_range_begin=1&msg_range_end=5000&sort_box_type=SORTARRIVAL&sort_box_reverse=1&'
-    urlListFolders = urlImapFunc + 'get_folders_list&onload=true'
-    urlMoveMsgs = urlImapFunc + 'move_messages&border_ID=null&sort_box_type=SORTARRIVAL&search_box_type=ALL&sort_box_reverse=1&reuse_border=null&get_previous_msg=0&'
-    urlSetFlags = urlImapFunc + 'set_messages_flag&'
-    urlGetMsg = urlImapFunc + 'get_info_msg&'
-    urlCreateFolder = urlImapFunc + 'create_mailbox&'
-    urlDeleteFolder = urlImapFunc + 'delete_mailbox&'
-    urlGetQuota = urlImapFunc + 'get_quota&folder_id=INBOX'
-    urlDownloadMessages = urlExpresso + 'expressoMail1_2/inc/gotodownload.php?msg_folder=null&msg_number=null&msg_part=null&newfilename=mensagens.zip&'
-    urlMakeEml = urlAction + 'exporteml.makeAll'
-    urlExportMsg = urlAction + 'exporteml.export_msg'
-    urlGetReturnExecuteForm = urlAction + 'functions.getReturnExecuteForm'
-    urlDeleteMsgs = urlImapFunc + 'delete_msgs&border_ID=null&'
-    urlInitRules = urlAction + 'ScriptS.init_a'
-    urlAutoClean = urlImapFunc + 'automatic_trash_cleanness&cyrus_delimiter=/&'
-    urlGetPrefs = urlAction + 'functions.get_preferences'
+    urlExpresso = 'https://expressov3.serpro.gov.br'
+    urlIndex = urlExpresso + '/index.php'
+    urlLogin = urlIndex
+    urlUpload = urlIndex + '?method=Tinebase.uploadTempFile'
 
     def __init__(self, user, passwd):
         # Os campos do formulário
         self.user = user
         self.passwd = passwd
-        self.fields = {}
-        self.fields['passwd_type'] = 'text'
-        self.fields['account type'] = 'u'
-        self.fields['user'] = user
-        self.fields['login'] = user
-        self.fields['passwd'] = passwd
-        self.fields['certificado'] = ''
+        self._reset()
+        self.callExpresso = self._reconnectDecor(self._callExpresso)
+        self.importMsg = self._reconnectDecor(self.importMsg)
+        self.getFullMsgs = self._reconnectDecor(self.getFullMsgs)
+        self.reconnectDecorCount = 0
 
+    def _reset(self):
+        """ Limpa os atributos da conexão. Este método também é chamado durante o logout. """
+        self.callid = 0
         self.logged = False
-
-        self.quota = 0
-        self.quotaLimit = 51200 #Kylo Bytes
+        self.jsonKey = ''
 
         #Inicialização
-        cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
-        self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookies), MultipartPostHandler )
+        self.cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
+        self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cookies), MultipartPostHandler )
+        self.opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.81 Safari/537.1'),
+                                  ('Origin', self.urlExpresso), ('Referer', self.urlExpresso)]
+
+    def _getCookie(self, name):
+        for cookie in self.cookies:
+            if cookie.name == name:
+                return cookie.value
+        return None
+
+    def _reconnectDecor(self, func, *args, **kwargs):
+        def call(*args, **kwargs):
+            self.reconnectDecorCount += 1
+            try:
+                return func(*args, **kwargs)
+            except SessionExpiredError:
+                if self.reconnectDecorCount > 1:
+                    raise
+                log( "Session expired. Reconnecting..." )
+                self.login()
+                return func(*args, **kwargs)
+            finally:
+                self.reconnectDecorCount -= 1
+        return call
+
+    def _hasUserCookie(self):
+        return self._getCookie('usercredentialcache') != None
 
     def openUrl(self, surl, params, post):
         if params != None and not post:
@@ -508,208 +304,249 @@ class ExpressoManager:
             surl += urllib.urlencode(params, True)
             params = None
         #log( surl )
+        sessionid = self._getCookie("TINE20SESSID")
         url = self.opener.open(surl, params)
-        if url.geturl().startswith(self.urlLogin):
-            url.close()
-            self.doLogin()
-            url = self.opener.open(surl, params)
+        # reconnects when the session id changes
+        if self.logged and sessionid != self._getCookie("TINE20SESSID"):
+            self.logged = False
+            raise SessionExpiredError()
         return url
 
-    def callExpresso(self, surl, params = None, post = False):
-        url = self.openUrl(surl, params, post)
-        response = url.read().decode('iso-8859-1')
+    def _checkRemoteError(self, resp):
+        if hasattr(resp, "error"):
+            log("* Error:", resp.error.message)
+            errcode = None
+            if resp.error.data != None:
+                errcode = resp.error.data.code
+
+                if errcode == 401: # Not Authorised
+                    raise SessionExpiredError()
+
+                log(' Code:', resp.error.data.code)
+                for trace in resp.error.data.trace:
+                    if hasattr(trace, "file"):
+                        log(' ', trace.file, trace.line, trace.function)
+            raise RemoteError(resp.error.message, errcode)
+
+    def _callExpresso(self, method, *params):
+        self.callid += 1
+        obj = {'jsonrpc': '2.0', 'method': method, 'id': self.callid, 'params': params}
+        headers = {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest',
+                   'X-Tine20-JsonKey': self.jsonKey, 'X-Tine20-Request-Type': 'JSON'}
+        req = urllib2.Request(self.urlIndex, json.dumps(obj, sort_keys=False, default=json_default), headers=headers)
+        if not 'login' in method:
+            print method, params
+        url = self.openUrl(req, None, True)
+        resp = unserialize(url.read())
         url.close()
-        return unserialize(response)
+        self._checkRemoteError(resp)
+        return resp.result
 
-    def doLogin(self):
+    def login(self):
+        success = False
         try:
-            url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
+            self._reset()
+            url = self.opener.open(self.urlExpresso)
+            url.read()
             url.close()
-
-            # chama o index para inicializar os atributos na sessão do servidor
-            url = self.opener.open(self.urlIndex)
-            self.logged = not url.geturl().startswith(self.urlLogin)
-            url.close()
-        except Exception, e:
-            raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + str(e))
+            # login($username, $password, $securitycode=NULL)
+            resp = self.callExpresso('Tinebase.login', self.user, self.passwd, '')
+            success = resp.success
+            if success:
+                self.jsonKey = resp.jsonKey
+                self.userAccount = resp.account
+                resp = self.callExpresso("Felamimail.getRegistryData");
+                self.account = resp.accounts.results[0]
+                self.supportedFlags = set([flag.id for flag in resp.supportedFlags.results])
+        except Exception as e:
+            raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + unicode(e))
+        finally:
+            self.logged = success
         if not self.logged:
             raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Check your password."))
 
+    def logout(self):
+        try:
+            if self.logged and self._hasUserCookie():
+                self._callExpresso("Tinebase.logout") # ignores the reconnect decorator
+        except SessionExpiredError:
+            pass
+        except Exception as e:
+            log( u"Logout failed:", unicode(e) )
+        finally:
+            self._reset()
+
     def listFolders(self):
-        data = self.callExpresso(self.urlListFolders)
-        folders = set() # usa-se um set porque o expresso pode retornar nomes repetidos
-        # as pastas vem indexadas de 0 até n em data
-        i = 0
-        while i in data:
-            folders.add(data[i]['folder_id'])
-            i += 1
-        # os outros 3 parâmetros são 'quota_limit', 'quota_percent', 'quota_used'
-        self.quota = data['quota_percent']
-        self.quotaLimit = data['quota_limit']
-        return folders
+        self.foldermap = {}
+        self._listFoldersRec("")
+        return self.foldermap.keys()
+
+    def _initFolderMap(self):
+        if not hasattr(self, "foldermap"):
+            self.listFolders()
+
+    def _callSearchFolders(self, parent):
+        # searchFolders($filter)
+        return self.callExpresso("Felamimail.searchFolders", [{"field":"account_id", "operator":"equals", "value":self.account.id},
+                                                              {"field":"globalname", "operator":"equals", "value":parent}])
+
+    def _listFoldersRec(self, parent):
+        try:
+            resp = self._callSearchFolders(parent)
+        except RemoteError as e:
+            if u'cannot change folder' in unicode(e):
+                log( u"Error listing folders. Reconnecting... " )
+                self.logout()
+                time.sleep(10) # waits 10 seconds
+                self.login()
+                resp = self._callSearchFolders(parent)
+            else:
+                raise
+        for folder in resp.results:
+            self.foldermap[folder.globalname] = folder
+            if folder.has_children:
+                self._listFoldersRec(folder.globalname)
 
     def createFolder(self, path):
-        res = self.callExpresso(self.urlCreateFolder, {'newp': path.encode('utf-8')})
-        if res.lower() != 'ok':
-            raise Exception(res.replace('<br />', ''))
+        self._initFolderMap()
+        parts = path.split('/')
+        # addFolder($name, $parent, $accountId)
+        newfolder = self.callExpresso("Felamimail.addFolder", parts[-1], "/".join(parts[:-1]), self.account.id)
+        self.foldermap[newfolder.globalname] = newfolder
 
     def deleteFolder(self, path):
         """ Cuidado! Exclui também as mensagens que estão dentro da pasta """
-        res = self.callExpresso(self.urlDeleteFolder, {'del_past': path.encode('utf-8')})
-        if res.lower() != 'ok':
-            raise Exception(res.replace('<br />', ''))
+        # deleteFolder($folder, $accountId)
+        self.callExpresso("Felamimail.deleteFolder", path, self.account.id)
 
-    def getMsg(self, msgfolder, msgid):
-        return ExpressoMessage(self.callExpresso(self.urlGetMsg, {'msg_number': msgid,
-                                                                  'msg_folder' : msgfolder.encode('iso-8859-1')}))
+    def getFullMsgs(self, msgsid):
+        # downloadMessage($messageId)
+        url = self.openUrl(self.urlIndex, {"method": "Felamimail.downloadMessage", "requestType": "HTTP",
+                                           "messageId": joinstr(msgsid)}, True)
+        filename = url.info()['Content-Disposition'].split("=")[1].strip('"')
 
-    def getFullMsgs(self, msgfolder, msgsid):
-        idx_file = self.callExpresso(self.urlMakeEml, {'folder': msgfolder.encode('utf-8'), 'msgs_to_export': msgsid}, True)
+        msgs = {}
 
-        if not idx_file:
-            return None
-        try:
-            url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
-        except urllib2.HTTPError, e:
-            # handling errors from expresso when exporting messages, only to small lists
-            if (e.code == 404) and (msgsid.count(',') < 2):
-                return None
-            raise
-        except:
-            log( "Error downloading full messages.", "   idx_file:", idx_file )
-            raise
+        if filename.lower().endswith('.eml'):
+            source = url.read()
+            if "From:" in source:
+                msgs[filename[: -4]] = source
+            return msgs
+
         try:
             zfile = zipfile.ZipFile(StringIO(url.read()))
-            msgs = {}
             for name in zfile.namelist():
-                #formato do nome SUBJECT_ID.eml, extraí o ID do nome do arquivo
+                # formato do nome ID.eml, extraí o ID do nome do arquivo
                 source = str(zfile.read(name)) # a codificação das mensagens é ASCII
                 if not "From:" in source:
                     continue # mensagem inválida
-                idstart = name.rindex('_') + 1
-                if idstart <= 0:
-                    continue # id não identificado
-                msgs[int(name[idstart : -4])] = source
+                msgs[name[: -4]] = source
             zfile.close()
-        except zipfile.BadZipfile, e:
-            log( "Error downloading full messages.", "   idx_file:", idx_file )
+        except zipfile.BadZipfile:
+            log( "Error downloading full messages." )
             return None
         finally:
             url.close()
         return msgs
 
-    def getFullMsgEspecial(self, msgfolder, msgid):
-        #faz o download e uma única mensagem, deve ser usado nos casos em que getFullMsgs não funciona
-        idx_file = self.callExpresso(self.urlExportMsg, {'folder': msgfolder.encode('utf-8'), 'msgs_to_export': msgid}, True)
+    def importMsg(self, msgfolder, source):
+        """ A mensagem é importada para a pasta especificada e entra como lida. """
+        self._initFolderMap()
+        headers = {'X-File-Name': "email.eml", 'X-File-Size': len(source), 'X-File-Type': 'message/rfc822',
+                   'X-Requested-With': 'XMLHttpRequest', 'X-Tine20-Request-Type': 'HTTP'}
+        req = urllib2.Request(self.urlUpload, source, headers=headers)
+        url = self.openUrl(req, None, True)
+        resp = unserialize(url.read())
+        # verifica se aconteceu algum erro
+        if resp.status != 'success':
+            log(resp.__dict__)
+            raise Exception(_("Import failed."))
+        # importMessage($accountId,$folderId, $file)
+        resp = self.callExpresso("Felamimail.importMessage", self.account.id, self.foldermap[msgfolder].id, resp.tempFile.path)
 
-        if not idx_file:
-            return None
+    def _makeExpressoFlags(self, flags):
+        return replaceinset(set(flags), '$Forwarded', 'Passed') & self.supportedFlags
 
-        url = self.openUrl(self.urlDownloadMessages, {'idx_file': idx_file}, False)
-        source = str(url.read())
-        url.close()
-        if not "From:" in source:
-            return None #mensagem inválida
-        return source
+    def addFlags(self, msgids, flags):
+        flags = self._makeExpressoFlags(flags)
+        if len(flags) > 0:
+            # addFlags($filterData, $flags)
+            self.callExpresso("Felamimail.addFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
 
-    def importMsgs(self, msgfolder, msgfile):
-        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('iso-8859-1'), '_action': '$this.imap_functions.import_msgs',
-                                                    'countFiles': 1, 'file_1' : msgfile}, True)
-        url.close()
-        #verifica se aconteceu algum erro
-        result = self.callExpresso(self.urlGetReturnExecuteForm)
-        if 'error' in result and result['error'].strip() != '':
-            raise Exception(result['error'])
+    def clearFlags(self, msgids, flags):
+        flags = self._makeExpressoFlags(flags)
+        if len(flags) > 0:
+            # clearFlags($filterData, $flags)
+            self.callExpresso("Felamimail.clearFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
 
-    def importMsgWithTime(self, msgfolder, source, msgtime, flagset):
-        """ Faz o import com o método unarchive_mail.
-            Este método possibilita a informação da data da mensagem. """
-
-        # converte os flags para o formato da função do expresso
-        flagmap = [('\\Answered','A'), ('\\Draft','X'), ('\\Flagged','F'), ('\\Unseen','U'), ('$Forwarded', 'F')]
-        eflags = [];
-        for (flagname, flagsymbol) in flagmap:
-            if flagname in flagset:
-                eflags.append(flagsymbol)
-            else:
-                eflags.append('')
-
-        url = self.openUrl(self.urlController, {'folder': msgfolder.encode('utf-8'),
-                                                '_action': '$this.imap_functions.unarchive_mail', 'id' : '1',
-                                                'source': source, 'timestamp' : msgtime, 'flags' : ':'.join(eflags)}, True)
-        url.close()
-        #verifica se aconteceu algum erro
-        result = self.callExpresso(self.urlGetReturnExecuteForm)
-        if 'error' in result and not isinstance(result['error'], bool) and result['error'].strip() != '':
-            raise Exception(result['error'])
-        # o result contem um item 'archived' com o número do mensagem passado no parâmetro 'id'
-
-    def setMsgFlag(self, msgfolder, msgid, flag):
-        self.callExpresso(self.urlSetFlags, {'flag': flag.lower(), 'msgs_to_set' : msgid, 'folder' : msgfolder.encode('iso-8859-1')})
+    def calcHashId(self, msg):
+        m = hashlib.md5()
+        m.update(msg.content_type.encode('utf-8') + '@')
+        m.update(msg.sent.encode('utf-8') + '@')
+        m.update(msg.from_email.encode('utf-8') + '@')
+        for item in msg.to:
+            m.update(item.encode('utf-8') + '@')
+        m.update(msg.subject.encode('utf-8') + '@')
+        m.update(str(msg.size))
+        return m.hexdigest()
 
     def getMsgs(self, criteria, folder):
-        """ Por motivos de compatibilidade o atributo criteria deve estar entre: "ALL", "UNSEEN" e "SEEN".
+        """ Por motivos de compatibilidade o atributo criteria deve estar entre: "ALL", "UNSEEN".
         """
-        filterParam = {'search_box_type': criteria.encode('iso-8859-1'), 'folder': folder.encode('iso-8859-1')}
-
-        data = self.callExpresso(self.urlCheck, filterParam)
-        # verifica se a resposta é válida
-        if isinstance(data, bool):
-            raise Exception(_('Error loading messages from Expresso.'))
-
+        self._initFolderMap()
+        filterParam = [{"field":"path", "operator":"in", "value": ["/{0}/{1}".format(self.account.id, self.foldermap[folder].id)]}]
+        if criteria == 'UNSEEN':
+            filterParam.append({"field":"flags", "operator":"notin", "value":["\\Seen"]})
         msgs = []
-        # as mensagens vem identificadas por um número (sequêncial) no dict da resposta
-        i = 0
-        while i in data:
-            msgs.append(ExpressoMessage(data[i]))
-            i += 1
+        limit = 1000
+        start = 0
+        while True:
+            # searchMessages($filter, $paging)
+            resp = self.callExpresso("Felamimail.searchMessages", filterParam, {"sort":"received", "dir":"DESC", "start":start, "limit":limit})
+
+            for msg in resp.results:
+                msg.flags = replaceinset(set(msg.flags), 'Passed', '$Forwarded')
+                msg.hashid = self.calcHashId(msg)
+                msgs.append(msg)
+
+            if len(resp.results) < limit:
+                break
+            start += limit
 
         return msgs
 
+    @property
+    def quotaLimit(self):
+        self._initFolderMap()
+        # KBytes
+        return int(self.foldermap['INBOX'].quota_limit, 10)
+
+    @property
+    def quota(self):
+        """ Returns quota usage in percentage. """
+        self._initFolderMap()
+        return int(100 * int(self.foldermap['INBOX'].quota_usage, 10) / self.quotaLimit)
+
     def updateQuota(self):
-        data = self.callExpresso(self.urlGetQuota)
-        # os 3 parâmetros são 'quota_limit', 'quota_percent', 'quota_used'
-        self.quota = data['quota_percent']
-        self.quotaLimit = data['quota_limit']
+        self._initFolderMap()
+        # updateMessageCache($folderId, $time)
+        self.foldermap['INBOX'] = self.callExpresso("Felamimail.updateMessageCache", self.foldermap['INBOX'].id, 180)
 
-    def moveMsgs(self, msgid, msgfolder, newfolder):
-        if newfolder.upper() == 'INBOX':
-            newfoldername = 'Caixa de Entrada'
-        else:
-            newfoldername = newfolder.split('/')[-1]
-        self.callExpresso(self.urlMoveMsgs, {'folder': msgfolder.encode('iso-8859-1'), 'msgs_number': msgid,
-                                            'new_folder' : newfolder.encode('iso-8859-1'), 'new_folder_name': newfoldername.encode('iso-8859-1')})
+    def moveMsgs(self, msgids, newfolder):
+        self._initFolderMap()
+        # moveMessages($filterData, $targetFolderId)
+        folders = self.callExpresso("Felamimail.moveMessages", [{"field":"id", "operator":"in", "value": msgids}], self.foldermap[newfolder].id)
+        for folder in folders:
+            self.foldermap[folder.globalname] = folder
 
-    def deleteMsgs(self, msgid, msgfolder):
+    def deleteMsgs(self, msgids):
         """Cuidado! Exclui permanentente as mensagens."""
-        self.callExpresso(self.urlDeleteMsgs, {'folder': msgfolder.encode('iso-8859-1'), 'msgs_number': msgid})
-
-    def getFoldersWithRules(self):
-        data = self.callExpresso(self.urlInitRules)
-        folders = ['INBOX']
-        if 'rule' in data:
-            rules = data['rule']
-            for i in rules:
-                rule = rules[i].split('&&')
-                folder = rule[7]
-                # só filtros, com pastas que não sejas a lixeira e que começem com INBOX
-                if rule[2] == 'ENABLED' and rule[6] == 'folder' and folder != 'INBOX/Trash' \
-                   and len(folder) > 0 and not folder in folders and folder.startswith('INBOX'):
-                    folders.append(folder)
-        return folders
-
-    def getPrefs(self):
-        return self.callExpresso(self.urlGetPrefs)
+        self.addFlags(msgids, ["\\Deleted"])
 
     def autoClean(self):
-        prefs = self.getPrefs()
-        # verifica qual a configuração do usuário
-        past_days_count = int(prefs.get('delete_trash_messages_after_n_days', '0'))
-        if past_days_count == 0:
-            log( "Skipping trash auto clean" )
-            return
-        data = self.callExpresso(self.urlAutoClean, {'before_date': past_days_count})
-        log( "AutoClean(%d) response:" % past_days_count, data )
+        # deleteMsgsBeforeDate($accountId)
+        resp = self.callExpresso("Felamimail.deleteMsgsBeforeDate", self.account.id)
+        log( "AutoClean response:", resp.msgs )
 
 
 ##################################################
@@ -873,9 +710,9 @@ class MsgList():
 #########################################################
 class MailSynchronizer():
     metadataFolder = 'INBOX/_metadata_dont_delete'
-    relevantFlags = set([r'\Seen',r'\Answered',r'\Flagged',r'$Forwarded'])
-    allflags = relevantFlags | set([r'\Deleted', r'\Draft'])
-    removableFlags = set([r'\Seen',r'\Flagged'])
+    relevantFlags = set([r'\Seen',r'\Answered',r'\Flagged',r'$Forwarded',r'\Draft'])
+    allflags = relevantFlags | set([r'\Deleted'])
+    removableFlags = set([r'\Seen',r'\Flagged',r'\Draft'])
 
     def __init__(self):
         if not os.path.exists(iexpressodir):
@@ -884,6 +721,7 @@ class MailSynchronizer():
         self.deleteHandler = self
         self.client = None
         self.curday = 0
+        self.es = None
         self.defaultFolders = frozenset(['INBOX', 'INBOX/Sent', 'INBOX/Trash', 'INBOX/Drafts'])
         self.staleMsgs = {}
 
@@ -896,7 +734,7 @@ class MailSynchronizer():
                     logError()
             self.client = imaplib.IMAP4('localhost')
             self.client.login(self.user, self.password)
-        except Exception, e:
+        except Exception as e:
             raise LoginError(_(u"Error connecting to local IMAP server: \n%s") % \
                                  ', '.join([str(i) for i in e.args]))
 
@@ -904,18 +742,23 @@ class MailSynchronizer():
         self.user = user
         self.password = password
         self.checkPreConditions()
-        self.createExpressoManager()
+        self.resetExpressoManager()
         self.curday = 0
         self.loginLocal()
         self.db = self.loadDb()
         self.smartFolders = None
 
-    def createExpressoManager(self):
-        self.es = ExpressoManager(self.user, self.password)
+    def resetExpressoManager(self):
+        if self.es != None:
+            self.es.logout()
+        else:
+            self.es = ExpressoManager(self.user, self.password)
 
     def close(self):
         log( 'Shutting down ...' )
         self.logoutLocal()
+        if self.es != None:
+            self.es.logout()
 
     def logoutLocal(self):
         if hasattr(self, 'client') and self.client != None:
@@ -951,7 +794,7 @@ class MailSynchronizer():
     def syncFolders(self):
         self.getLocalFolders()
         # verifica se todas as pastas do expresso existem no imap local
-        folders = self.es.listFolders()
+        folders = set(self.es.listFolders())
         ordFolders = list(folders)
         ordFolders.sort() # ordena para que as pastas sejam criadas na ordem correta
         for folder_id in ordFolders:
@@ -1114,29 +957,17 @@ class MailSynchronizer():
                         log( "Re-downloading entire folder." )
                         todownload = list(msgs)
                         break
-                    edb.update(dbid, msg.id, folder_id, msg.getFlags(), msg.hashid) #atualiza os dados da msg
+                    edb.update(dbid, msg.id, folder_id, msg.flags, msg.hashid) #atualiza os dados da msg
                 else:
                     todownload.append(msg)
 
             if len(todownload) > 0:
-                newmsgs = self.es.getFullMsgs(folder_id, ','.join([str(msg.id) for msg in todownload]))
-                if newmsgs == None:
-                    #download falhou, faz o download de todas as mensagens pelo modo especial
-                    newmsgs = {}
-                # se nem todas as mensagens foram retornadas faz o download especial
-                if len(newmsgs) != len(todownload):
-                    # mensagens com caracteres especiais devem ser importadas individualmente
-                    for msg in todownload:
-                        if not msg.id in newmsgs:
-                            log( 'Getting message using alternative way:', msg.id )
-                            msgsrc = self.es.getFullMsgEspecial(folder_id, msg.id)
-                            if not msgsrc is None:
-                                newmsgs[msg.id] = msgsrc
+                newmsgs = self.es.getFullMsgs([msg.id for msg in todownload])
 
                 #importa as mensagens no banco
                 for msg in todownload:
                     if msg.id in newmsgs:
-                        eflags = msg.getFlags()
+                        eflags = msg.flags
                         mailmessage = MailMessage( newmsgs[msg.id] )
                         dbid = self.getDbId(mailmessage, True)
                         strflags = '(' + ' '.join(eflags) + ')'
@@ -1169,7 +1000,7 @@ class MailSynchronizer():
         compressLog()
         log( '* Full refresh -', time.asctime() )
         try:
-            self.createExpressoManager() # full refresh does a relogin to avoid problems with dirty sessions
+            self.resetExpressoManager() # full refresh does a relogin to avoid problems with dirty sessions
             localdb = self.initUpdate()
 
             try:
@@ -1205,7 +1036,7 @@ class MailSynchronizer():
     def initUpdate(self):
 
         if not self.es.logged:
-            self.es.doLogin()
+            self.es.login()
 
         try:
             localdb = self.loadLocalMsgs()
@@ -1232,7 +1063,7 @@ class MailSynchronizer():
         # somente mensagens não lidas são carregadas
         try:
             if self.smartFolders == None:
-                self.smartFolders = self.es.getFoldersWithRules() # somente as pastas com regras são atualizadas
+                self.smartFolders = ['INBOX'] # somente as pastas com regras são atualizadas
 
             localdb = self.initUpdate()
             try:
@@ -1366,19 +1197,11 @@ class MailSynchronizer():
             msgbody = msgsrc[1][1][1]
 
             self.createFolderExpresso(folder)
-            mailmessage = MailMessage(msgheader)
-            date = mailmessage.getMessageDateAsInt()
-            if date is None:
-                log('Importing message without date info.')
-                date = time.mktime(time.localtime())
 
-            flagset = set(localflags)
-            if not '\\Seen' in flagset:
-                flagset.add('\\Unseen')
-            self.es.importMsgWithTime(folder, msgheader + msgbody, date, flagset)
+            self.es.importMsg(folder, msgheader + msgbody)
 
             self.staleMsgs[dbid] = folder
-            self.db.update(dbid, '', folder, localflags & self.relevantFlags, '')
+            self.db.update(dbid, '', folder, set(['\\Seen']), '')
 
         self.closeLocalFolder()
 
@@ -1397,9 +1220,9 @@ class MailSynchronizer():
                 if not skipExpresso:
                     # cuidado! irá excluir permanentemente as mensagens
                     # quando eid == '' deve ser um import que falhou. Então a mensagem não está no Expresso.
-                    strids = ','.join([str(item.eid) for item in todelete[folder] if item.eid != ''])
-                    log( 'Deleting messages from Expresso. Ids: %s   folder: %s' % (strids, folder) )
-                    self.es.deleteMsgs(strids, folder)
+                    ids = [item.eid for item in todelete[folder] if item.eid != '']
+                    log( 'Deleting messages from Expresso. Ids: %s   folder: %s' % (joinstr(ids), folder) )
+                    self.es.deleteMsgs(ids)
                 # atualiza o banco, se skipExpresso for True as mensagens serão recarregadas
                 # da próxima vez que houver full refresh
                 for item in todelete[folder]:
@@ -1407,18 +1230,20 @@ class MailSynchronizer():
 
     def flagMessagesExpresso(self, toflag, newflags):
         # envia os comandos para alterar os flags no expresso
-        for folder, flags in toflag.items():
-            for flag, msgs in flags.items():
-                if len(msgs) > 0:
-                    strids = ','.join([str(eid) for eid in msgs])
-                    log( 'Updating flags ids: %s  flag: %s  folder: %s' % (strids, flag, folder) )
-                    self.es.setMsgFlag(folder, strids, flag)
-                    for eid in msgs:
-                        dbid = self.db.getId(eid, folder)
-                        if dbid != None and dbid in newflags:
-                            self.db.update(dbid, eid, folder, newflags[dbid] & self.relevantFlags) # atualiza o banco
-                        else:
-                            log("Message not found:", eid, folder, dbid, ' '.join(newflags))
+        for (flag, add), msgs in toflag.items():
+            if len(msgs) > 0:
+                ids = [i[0] for i in msgs]
+                log( 'Updating flags ids: %s  flag: %s  add: %s' % (joinstr(ids), flag, str(add)) )
+                if add:
+                    self.es.addFlags(ids, [flag])
+                else:
+                    self.es.clearFlags(ids, [flag])
+                for eid, efolder in msgs:
+                    dbid = self.db.getId(eid, efolder)
+                    if dbid != None and dbid in newflags:
+                        self.db.update(dbid, eid, efolder, newflags[dbid] & self.relevantFlags) # atualiza o banco
+                    else:
+                        log("Message not found:", eid, efolder, dbid, ' '.join(newflags))
 
     def createFolderExpresso(self, newfolder):
         for folder in self.iterParents(newfolder):
@@ -1435,10 +1260,10 @@ class MailSynchronizer():
     def moveMessagesExpresso(self, tomove):
         # move as mensagens
         for (efolder, newfolder), items in tomove.items():
-            strids = ','.join([str(item.eid) for item in items])
-            log( 'Moving ids: %s   folder: %s   newfolder: %s' % (strids, efolder, newfolder) )
+            ids = [item.eid for item in items]
+            log( 'Moving ids: %s   folder: %s   newfolder: %s' % (joinstr(ids), efolder, newfolder) )
             self.createFolderExpresso(newfolder)
-            self.es.moveMsgs(strids, efolder, newfolder)
+            self.es.moveMsgs(ids, newfolder)
             for item in items:
                 self.staleMsgs[item.dbid] = newfolder
 
@@ -1527,16 +1352,11 @@ class MailSynchronizer():
 
     def mapFlagsExpresso(self, toflag, eid, efolder, eflags, diff):
         newflags = (eflags - diff.removed) | diff.added
-        if efolder in toflag:
-            flags = toflag[efolder]
-        else:
-            flags = {'seen': [], 'unseen': [], 'answered': [], 'forwarded': [], 'flagged': [], 'unflagged': []}
-            toflag[efolder] = flags
 
         for flag in diff.added:
-            flags[flag[1:].lower()].append(eid)
+            toflag.setdefault((flag, True), []).append((eid, efolder))
         for flag in diff.removed:
-            flags['un' + flag[1:].lower()].append(eid)
+            toflag.setdefault((flag, False), []).append((eid, efolder))
 
         return newflags
 
@@ -1544,7 +1364,7 @@ class FlagsDiff:
     def __init__(self, flags1, flags2, insertable, removable):
         self.removed = (flags2 & removable) - flags1
         self.added = (flags1 & insertable) - flags2
-    
+
     def isEmpty(self):
         return len(self.added) == 0 and len(self.removed) == 0
 
@@ -1578,5 +1398,5 @@ if __name__ == "__main__":
             sync.close()
     except KeyboardInterrupt:
         pass
-    except IExpressoError, e:
+    except IExpressoError as e:
         log( "*** Error:", str(e) )
