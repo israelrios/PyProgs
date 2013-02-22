@@ -248,7 +248,6 @@ class LoginError(IExpressoError):
 class ExpressoManager:
     urlExpresso = 'https://expressov3.serpro.gov.br'
     urlIndex = urlExpresso + '/index.php'
-    urlLogin = urlIndex
     urlUpload = urlIndex + '?method=Tinebase.uploadTempFile'
 
     def __init__(self, user, passwd):
