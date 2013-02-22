@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-11-03 14:46-0200\n"
+"POT-Creation-Date: 2013-02-22 16:22-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -30,6 +30,9 @@ msgid "Bad response."
 msgstr ""
 
 msgid "Canno't create tray icon: "
+msgstr ""
+
+msgid "Captcha value is required."
 msgstr ""
 
 msgid "Check your password."
@@ -57,9 +60,6 @@ msgid ""
 "%s"
 msgstr ""
 
-msgid "Error deleting messages from expresso."
-msgstr ""
-
 msgid "Error loading local folders."
 msgstr ""
 
@@ -72,7 +72,7 @@ msgstr ""
 msgid "Error:"
 msgstr ""
 
-msgid "Invalid response format from Expresso."
+msgid "Import failed."
 msgstr ""
 
 msgid "It was not possible to check your mail box. Error:"
@@ -99,6 +99,9 @@ msgstr ""
 msgid "Sa_ve Password"
 msgstr ""
 
+msgid "Session Expired."
+msgstr ""
+
 msgid "There is another instance running for this user."
 msgstr ""
 
@@ -109,6 +112,9 @@ msgid "Username and password are required."
 msgstr ""
 
 msgid "Username: "
+msgstr ""
+
+msgid "Value: "
 msgstr ""
 
 msgid "You must recreate your local INBOX."

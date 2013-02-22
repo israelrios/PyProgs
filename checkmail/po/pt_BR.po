@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pt_BR\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-11-03 14:46-0200\n"
+"POT-Creation-Date: 2013-02-22 16:22-0300\n"
 "PO-Revision-Date: 2010-07-19 09:02-0300\n"
 "Last-Translator: Israel Rios\n"
 "Language-Team: \n"
@@ -32,6 +32,9 @@ msgstr "Resposta Inválida."
 msgid "Canno't create tray icon: "
 msgstr "Não foi possível criar o ícone de status: "
 
+msgid "Captcha value is required."
+msgstr "Valor do captcha é obrigatório."
+
 msgid "Check your password."
 msgstr "Verifique a sua senha."
 
@@ -52,13 +55,13 @@ msgid "Error"
 msgstr "Erro"
 
 # python-format
+#, python-format
 msgid ""
 "Error connecting to local IMAP server: \n"
 "%s"
-msgstr "Não foi possível conectar ao servidor IMAP local: \n%s"
-
-msgid "Error deleting messages from expresso."
-msgstr "Erro ao excluir mensagens no expresso."
+msgstr ""
+"Não foi possível conectar ao servidor IMAP local: \n"
+"%s"
 
 msgid "Error loading local folders."
 msgstr "Erro ao carregar pastas locais."
@@ -72,8 +75,8 @@ msgstr "Erro ao carregar as mensagens do Expresso."
 msgid "Error:"
 msgstr "Erro:"
 
-msgid "Invalid response format from Expresso."
-msgstr "O formato da resposta do Expresso é inválido."
+msgid "Import failed."
+msgstr "A importação falhou."
 
 msgid "It was not possible to check your mail box. Error:"
 msgstr "Não foi possível verificar o seu email. Erro:"
@@ -99,6 +102,9 @@ msgstr "Senha: "
 msgid "Sa_ve Password"
 msgstr "Sal_var Senha"
 
+msgid "Session Expired."
+msgstr "Sessão Expirada."
+
 msgid "There is another instance running for this user."
 msgstr "Existe uma outra instância em execução para este usuário."
 
@@ -111,6 +117,9 @@ msgstr "Usuário e senha são obrigatórios."
 msgid "Username: "
 msgstr "Usuário: "
 
+msgid "Value: "
+msgstr "Valor: "
+
 msgid "You must recreate your local INBOX."
 msgstr "Você deve recriar a sua INBOX local."
 
@@ -120,3 +129,9 @@ msgstr "Você deve remover o arquivo \"%s\"."
 
 msgid "_Auto Start"
 msgstr "_Auto Iniciar"
+
+#~ msgid "Error deleting messages from expresso."
+#~ msgstr "Erro ao excluir mensagens no expresso."
+
+#~ msgid "Invalid response format from Expresso."
+#~ msgstr "O formato da resposta do Expresso é inválido."
