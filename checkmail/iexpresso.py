@@ -422,25 +422,24 @@ class ExpressoManager:
     def getFullMsgs(self, msgsid):
         # downloadMessage($messageId)
         response = self.openUrl(self.urlIndex, {"method": "Felamimail.downloadMessage", "requestType": "HTTP",
-                                           "messageId": joinstr(msgsid)}, True)
-        filename = response.info()['Content-Disposition'].split("=")[1].strip('"')
-
+                                                "messageId": joinstr(msgsid)}, True)
         msgs = {}
 
-        if filename.lower().endswith('.eml'):
-            source = response.read()
-            if "From:" in source:
-                msgs[filename[: -4]] = source
-            return msgs
+        def addmsg(filename, source):
+            # formato do nome ID.eml, extraí o ID do nome do arquivo
+            if "From:" in source: msgs[filename[: -4]] = source
 
         try:
+            filename = response.info()['Content-Disposition'].split("=")[1].strip('"')
+            # case when just 1 message is returned, unzipped
+            if filename.lower().endswith('.eml'):
+                addmsg(filename, response.read())
+                return msgs
+
             zfile = zipfile.ZipFile(StringIO(response.read()))
             for name in zfile.namelist():
-                # formato do nome ID.eml, extraí o ID do nome do arquivo
-                source = str(zfile.read(name)) # a codificação das mensagens é ASCII
-                if not "From:" in source:
-                    continue # mensagem inválida
-                msgs[name[: -4]] = source
+                # a codificação das mensagens é ASCII
+                addmsg(name, str(zfile.read(name)))
             zfile.close()
         except zipfile.BadZipfile:
             log( "Error downloading full messages." )
