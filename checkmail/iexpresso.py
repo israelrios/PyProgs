@@ -117,7 +117,7 @@ class MailMessage:
 
     def getHeadersEnd(self):
         mo = patEmptyLine.search(self.msgsrc)
-        if mo != None:
+        if mo is not None:
             return mo.start()
         return len(self.msgsrc)
 
@@ -125,7 +125,7 @@ class MailMessage:
         """ Fixes bad formatted subjects. Especially the case of "\n" within encoded words. """
         try:
             mo = patSubject.search(self.getHeaders())
-            if mo != None:
+            if mo is not None:
                 subject = mo.group(1)[1:]
                 newsubject = fixEncodedWord(subject)
                 if subject != newsubject:
@@ -140,14 +140,14 @@ class MailMessage:
     def getMessageId(self):
         # se não houver um Message-Id retorna None
         mo = patMessageId.search(self.getHeaders())
-        if mo != None:
+        if mo is not None:
             return mo.group(1).strip();
         else:
             return None
 
     def getSender(self):
         mo = patSender.search(self.getHeaders())
-        if mo != None:
+        if mo is not None:
             return decode_header(mo.group(1).strip())
         return "";
 
@@ -254,6 +254,7 @@ class ExpressoManager:
         # Os campos do formulário
         self.user = user
         self.passwd = passwd
+        self.foldermap = None
         self._reset()
         self.callExpresso = self._reconnectDecor(self._callExpresso)
         self.importMsg = self._reconnectDecor(self.importMsg)
@@ -294,10 +295,10 @@ class ExpressoManager:
         return call
 
     def _hasUserCookie(self):
-        return self._getCookie('usercredentialcache') != None
+        return self._getCookie('usercredentialcache') is not None
 
     def openUrl(self, surl, params, post):
-        if params != None and not post:
+        if params is not None and not post:
             if not surl.endswith('&'):
                 surl += '&'
             surl += urllib.urlencode(params, True)
@@ -315,7 +316,7 @@ class ExpressoManager:
         if hasattr(ret, "error"):
             log("* Error:", ret.error.message)
             errcode = None
-            if ret.error.data != None:
+            if ret.error.data is not None:
                 errcode = ret.error.data.code
 
                 if errcode == 401: # Not Authorised
@@ -381,7 +382,7 @@ class ExpressoManager:
         return self.foldermap.keys()
 
     def _initFolderMap(self):
-        if not hasattr(self, "foldermap"):
+        if self.foldermap is None:
             self.listFolders()
 
     def _callSearchFolders(self, parent):
@@ -726,7 +727,7 @@ class MailSynchronizer():
 
     def loginLocal(self):
         try:
-            if self.client != None and self.client.state in ('AUTH', 'SELECTED'):
+            if self.client is not None and self.client.state in ('AUTH', 'SELECTED'):
                 try:
                     self.logoutLocal()
                 except:
@@ -748,7 +749,7 @@ class MailSynchronizer():
         self.smartFolders = None
 
     def resetExpressoManager(self):
-        if self.es != None:
+        if self.es is not None:
             self.es.logout()
         else:
             self.es = ExpressoManager(self.user, self.password)
@@ -756,11 +757,11 @@ class MailSynchronizer():
     def close(self):
         log( 'Shutting down ...' )
         self.logoutLocal()
-        if self.es != None:
+        if self.es is not None:
             self.es.logout()
 
     def logoutLocal(self):
-        if hasattr(self, 'client') and self.client != None:
+        if hasattr(self, 'client') and self.client is not None:
             self.closeLocalFolder()
             self.client.logout()
 
@@ -902,7 +903,7 @@ class MailSynchronizer():
                                 headers = m[1]
                                 mailmessage = MailMessage(headers)
                                 dbid = self.getDbId(mailmessage)
-                                if dbid == None or dbid == '':
+                                if dbid is None or dbid == '':
                                     raise IExpressoError(_('Error loading local messages.'))
 
                                 localdb.add(dbid, localid, '', folder, flags & self.allflags)
@@ -926,7 +927,7 @@ class MailSynchronizer():
 
     def getDbId(self, mailmessage, genId = False):
         msgid = mailmessage.getMessageId()
-        if msgid != None and msgid != '':
+        if msgid is not None and msgid != '':
             # o dbid leva em conta o MESSAGE-ID e o SENDER
             return msgid + mailmessage.getSender()
         else:
@@ -948,7 +949,7 @@ class MailSynchronizer():
             todownload = []
             for msg in msgs:
                 dbid = self.db.getId(msg.id, folder_id)
-                if dbid != None:
+                if dbid is not None:
                     hashid = self.db.getHashId(dbid)
                     # hashid == '' means "Imported and not synced"
                     if hashid != '' and hashid != msg.hashid:
@@ -990,7 +991,7 @@ class MailSynchronizer():
     def checkSignature(self, localdb):
         sig = self.getLocalSignature()
         if sig != self.db.signature:
-            if sig == None and localdb.isEmpty() and self.db.isNew:
+            if sig is None and localdb.isEmpty() and self.db.isNew:
                 self.storeLocalSignature()
             else:
                 raise IExpressoError(_('DB and INBOX signatures does not match.'))
@@ -1061,7 +1062,7 @@ class MailSynchronizer():
         log( '* Smart refresh -', time.asctime() )
         # somente mensagens não lidas são carregadas
         try:
-            if self.smartFolders == None:
+            if self.smartFolders is None:
                 self.smartFolders = ['INBOX'] # somente as pastas com regras são atualizadas
 
             localdb = self.initUpdate()
@@ -1211,7 +1212,7 @@ class MailSynchronizer():
     def deleteFromExpresso(self, localdb, todelete):
         if len(todelete) > 0:
             self.checkSignature(localdb)
-            skipExpresso = self.deleteHandler != None and not self.deleteHandler.askDeleteMessages(todelete)
+            skipExpresso = self.deleteHandler is not None and not self.deleteHandler.askDeleteMessages(todelete)
             if skipExpresso:
                 log("Messages deletion canceled by user action.")
             # se o usuário cancelar a operação, deleta do banco para que as mensagens sejam restauradas dá próxima vez
@@ -1239,7 +1240,7 @@ class MailSynchronizer():
                     self.es.clearFlags(ids, [flag])
                 for eid, efolder in msgs:
                     dbid = self.db.getId(eid, efolder)
-                    if dbid != None and dbid in newflags:
+                    if dbid is not None and dbid in newflags:
                         self.db.update(dbid, eid, efolder, newflags[dbid] & self.relevantFlags) # atualiza o banco
                     else:
                         log("Message not found:", eid, efolder, dbid, ' '.join(newflags))
