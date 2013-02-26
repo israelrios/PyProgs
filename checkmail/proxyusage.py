@@ -133,7 +133,7 @@ class ProxyUsageService(Service):
         parser.close()
 
         mo = self.pattern.search(parser.texto)
-        if mo != None:
+        if mo is not None:
             return mo.groups()
         else:
             #O parser não suporta HTML entitys (Ex: &aacute)

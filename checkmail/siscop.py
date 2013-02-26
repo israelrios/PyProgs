@@ -51,7 +51,7 @@ class SisCopTrayIcon(TrayIcon):
         else:
             self.set_from_stock('gtk-dialog-warning')
             tip = u'Faça o login.'
-        if iconname != None:
+        if iconname is not None:
             iconname = os.path.join(curdir, iconname)
             self.set_from_file(iconname)
         self.set_tooltip(tip)
@@ -102,11 +102,11 @@ class SisCopService(Service):
         self.setIcon(status)
 
     def showPage(self, pageId=None):
-        if pageId != None and self != threading.currentThread():
+        if pageId is not None and self != threading.currentThread():
             return
         """ Mostra a página do SisCop se o pageId for diferente do último. """
-        if pageId == None or pageId != self.lastPageId:
-            if pageId != None:
+        if pageId is None or pageId != self.lastPageId:
+            if pageId is not None:
                 self.lastPageId = pageId
             #abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
@@ -127,7 +127,7 @@ class SisCopService(Service):
                 execute(["wmctrl", "-a", "Firefox"])
 
         #verifica se o usuário está na máquina
-        if pageId != None:
+        if pageId is not None:
             bus = dbus.SessionBus()
             ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
             try:
@@ -170,7 +170,7 @@ class SisCopService(Service):
     def login(self):
         if self.logged:
             return True
-        if self.captchaValue == None:
+        if self.captchaValue is None:
             return False
         self.opener = self.tempOpener
         self.cookiejar = self.tempCookiejar
@@ -214,7 +214,7 @@ class SisCopService(Service):
 
     def checkPeriod(self, dtEntr, dtExit):
         """ Verifica se já se passou mais de 5 horas da entrada do período. """
-        if dtEntr == None or dtExit != None:
+        if dtEntr is None or dtExit is not None:
             return True
         diff = datetime.datetime.today() - dtEntr
         if diff.seconds < SEC_ALERT_PERIOD: # menor que 5 horas
@@ -228,7 +228,7 @@ class SisCopService(Service):
 
     def checkReturn(self, exit1, entr2):
         """ Verifica se o retorno do almoço foi registrado. """
-        if exit1 == None or entr2 != None:
+        if exit1 is None or entr2 is not None:
             return True
         diff = datetime.datetime.today() - exit1
         self.timeReturn = exit1 + datetime.timedelta(seconds=SEC_HOUR)
@@ -261,7 +261,7 @@ class SisCopService(Service):
         if self.checkPeriod(entr1, exit1) and self.checkReturn(exit1, entr2):
             self.checkPeriod(entr2, exit2)
 
-        if self.timeReturn == None:
+        if self.timeReturn is None:
             return PONTO_OK
         return PONTO_NOK
 

@@ -125,7 +125,7 @@ class Service(threading.Thread):
             self.app.serviceQuit(self)
     
     def destroyTrayIcon(self):
-        if self._trayicon != None:
+        if self._trayicon is not None:
             self._trayicon.destroy()
             self._trayicon = None
             
@@ -152,7 +152,7 @@ class Service(threading.Thread):
 
     def getTrayIcon(self):
         """ Must be called from main thread. Use gobject.idle_add """
-        if self._trayicon == None:
+        if self._trayicon is None:
             if not self.isAlive():
                 raise Exception(_("Canno't create tray icon: ") + self.name + _(" is not running."))
             self._trayicon = self.createTrayIcon()
@@ -370,18 +370,18 @@ class MonConfig:
     
     def getAutoStartFileName(self):
         fname = self.app.desktopFile
-        if fname == None or len(fname) == 0:
+        if fname is None or len(fname) == 0:
             return None
         autodir = os.path.join(os.getenv('XDG_CONFIG_HOME') or os.path.join(self.home, '.config'), 'autostart')
         return os.path.join(autodir, fname)
         
     def isAutoStartEnabled(self):
         autofile = self.getAutoStartFileName()
-        return autofile != None and os.path.exists(autofile)
+        return autofile is not None and os.path.exists(autofile)
     
     def setAutoStartEnabled(self, enabled):
         autofile = self.getAutoStartFileName()
-        if autofile == None or enabled == self.isAutoStartEnabled():
+        if autofile is None or enabled == self.isAutoStartEnabled():
             return
         if enabled:
             # checks the autostart directory
@@ -416,7 +416,7 @@ class ServiceRunner:
         self.serviceClass = serviceClass
         
     def check(self, active, user, passwd):
-        if self.service != None:
+        if self.service is not None:
             self.service.quit()
             self.service = None
         if active:
@@ -432,21 +432,21 @@ class ServiceRunner:
             self.app.serviceQuit(service)
     
     def start(self):
-        if( self.service != None):
+        if( self.service is not None):
             self.started = True
             self.service.start();
     
     def running(self):
-        return (self.service != None)
+        return (self.service is not None)
     
     def quit(self):
-        if self.service != None:
+        if self.service is not None:
             print self.service
             self.service.quit()
 
     def join(self):
         service = self.service # guarda a instância porque ela pode ser alterada no serviceQuit
-        if service != None and service.isAlive():
+        if service is not None and service.isAlive():
             service.join(15) # aguarda no máximo 15 segundos
 
 

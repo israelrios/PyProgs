@@ -38,8 +38,8 @@ def decode_header(header):
     # "unfolding"
     dec = email.header.decode_header(patHeader.sub(' ', header.rstrip('\r\n')))
     for item in dec:
-        curAscii = item[1] == None
-        if lastAscii != None and lastAscii != curAscii:
+        curAscii = item[1] is None
+        if lastAscii is not None and lastAscii != curAscii:
             text.append(' ')
         if curAscii:
             text.append(item[0])
