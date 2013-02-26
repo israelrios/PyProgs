@@ -675,7 +675,7 @@ class MsgList():
     def loadSet(self, dbfile):
         lset = set()
         count = int(dbfile.readline().strip())
-        for _ in range(count):
+        for __ in range(count):
             lset.add(dbfile.readline().strip().decode('utf-8'))
         return lset
 
@@ -823,7 +823,7 @@ class MailSynchronizer():
                 self.localFolders.add(folder)
 
     def getLocalSignature(self):
-        typ, _ = self.client.select(self.metadataFolder, True)
+        typ, __ = self.client.select(self.metadataFolder, True)
         if typ != 'OK':
             return None
         typ, msg = self.client.fetch('1', '(BODY[HEADER.FIELDS (Message-Id)])')
@@ -1272,7 +1272,7 @@ class MailSynchronizer():
         return self.db.get(dbid)[0:2]
 
     def changeExpresso(self, localdb, doImport = False, doMove = False, doDelete = False):
-        for _ in range(2):
+        for __ in range(2):
             localdb.clearStats()
             diff = self.computeExpressoDiff(localdb, doImport, doMove, doDelete)
             if not localdb.wasModified():
@@ -1326,7 +1326,7 @@ class MailSynchronizer():
                     #    exdiff.move(efolder, 'INBOX/Trash', dbid, eid) #move pra lixeira quando estiver excluída
 
         for dbid in localdb.getIds():
-            _, localfolder, localflags = localdb.get(dbid)
+            __, localfolder, localflags = localdb.get(dbid)
             eid = ''
             if self.db.exists(dbid):
                 eid, efolder, eflags = self.db.get(dbid)
