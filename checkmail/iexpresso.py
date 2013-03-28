@@ -966,7 +966,7 @@ class MailSynchronizer():
                 #importa as mensagens no banco
                 for msg in todownload:
                     if msg.id in newmsgs:
-                        eflags = msg.flags
+                        eflags = msg.flags & self.relevantFlags 
                         mailmessage = MailMessage( newmsgs[msg.id] )
                         dbid = self.getDbId(mailmessage, True)
                         strflags = '(' + ' '.join(eflags) + ')'
@@ -979,7 +979,7 @@ class MailSynchronizer():
                                 checkImapError(typ, resp)
                                 # insert a dummy record that can't be used to update local imap
                                 localdb.setUpdated()
-                            self.db.update(dbid, msg.id, folder_id, eflags & self.relevantFlags, msg.hashid)
+                            self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                             self.unstale(dbid)
                         edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                 #re-verifica se todas as mensagens foram baixadas
