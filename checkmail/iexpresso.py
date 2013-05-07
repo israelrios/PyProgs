@@ -31,6 +31,8 @@ import hashlib
 iexpressodir = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.iexpresso')
 logfile = os.path.join(iexpressodir, 'log.txt')
 
+DEBUG_REQUESTS = False
+
 def log(*params):
     f = open(logfile, 'a+')
     printSpace = False
@@ -334,7 +336,7 @@ class ExpressoManager:
         headers = {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest',
                    'X-Tine20-JsonKey': self.jsonKey, 'X-Tine20-Request-Type': 'JSON'}
         req = urllib2.Request(self.urlIndex, json.dumps(obj, sort_keys=False, default=json_default), headers=headers)
-        if not 'login' in method:
+        if DEBUG_REQUESTS and not 'login' in method:
             print method, params
         response = self.openUrl(req, None, True)
         ret = unserialize(response.read())
@@ -1382,6 +1384,7 @@ if __name__ == "__main__":
         os.mkdir(iexpressodir)
 
     try:
+        DEBUG_REQUESTS = True
         sync = MailSynchronizer()
         try:
             sync.login(getpass.getuser(), getpass.getpass())
