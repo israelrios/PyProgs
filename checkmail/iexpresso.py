@@ -483,7 +483,7 @@ class ExpressoManager:
         m.update(msg.content_type.encode('utf-8') + '@')
         m.update(msg.sent.encode('utf-8') + '@')
         m.update(msg.from_email.encode('utf-8') + '@')
-        for item in msg.to:
+        for item in (msg.to or []):
             m.update(item.encode('utf-8') + '@')
         m.update(msg.subject.encode('utf-8') + '@')
         m.update(str(msg.size))
