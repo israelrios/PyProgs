@@ -482,12 +482,16 @@ class ExpressoManager:
 
     def calcHashId(self, msg):
         m = hashlib.md5()
-        m.update(msg.content_type.encode('utf-8') + '@')
-        m.update(msg.sent.encode('utf-8') + '@')
-        m.update(msg.from_email.encode('utf-8') + '@')
+        if msg.content_type is not None:
+            m.update(msg.content_type.encode('utf-8') + '@')
+        if msg.sent is not None:
+            m.update(msg.sent.encode('utf-8') + '@')
+        if msg.from_email is not None:
+            m.update(msg.from_email.encode('utf-8') + '@')
         for item in (msg.to or []):
             m.update(item.encode('utf-8') + '@')
-        m.update(msg.subject.encode('utf-8') + '@')
+        if msg.subject is not None:
+            m.update(msg.subject.encode('utf-8') + '@')
         m.update(str(msg.size))
         return m.hexdigest()
 
