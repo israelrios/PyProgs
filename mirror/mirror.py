@@ -13,24 +13,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+#
 # Changed by Israel Rios for better support to POST requests and to provide url "obfuscation"
-
+#
 # Based on work from Brett Slatkin (bslatkin@gmail.com)
 __author__ = "Israel Rios (isrrios@gmail.com)"
 
+import cgi
 import logging
 import re
+import os
 import urllib
 import urlparse
 import wsgiref.handlers
 
 from google.appengine.api import urlfetch
-from google.appengine.ext import webapp
-from google.appengine.ext.webapp import template
+import webapp2 as webapp
+import jinja2
 from google.appengine.runtime import apiproxy_errors
 
 import transform_content
+
+jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
+    extensions=['jinja2.ext.autoescape'])
 
 ################################################################################
 
@@ -108,7 +114,7 @@ class Client(object):
 
             logging.debug(str(rheaders))
 
-            if rdata != None and len(rdata) > 0:
+            if rdata is not None and len(rdata) > 0:
                 logging.debug('Doing Post...')
                 self.response = urlfetch.fetch(mirrored_url, payload=rdata, method=urlfetch.POST, headers=rheaders, follow_redirects=False, deadline=10)
             else:
@@ -118,7 +124,7 @@ class Client(object):
             logging.exception("Could not fetch URL")
             return False
 
-    return True
+        return True
 
 ################################################################################
 
@@ -146,15 +152,8 @@ class HomeHandler(BaseHandler):
 
             return self.redirect("/" + transform_content.encodeUrl(inputted_url) )
 
-        # Do this dictionary construction here, to decouple presentation from
-        # how we store data.
-        secure_url = None
-        if self.request.scheme == "http":
-            secure_url = "https://mirrorrr.appspot.com"
-        context = {
-          "secure_url": secure_url
-        }
-        self.response.out.write(template.render("main.html", context))
+        template = jinja_env.get_template('main.html')
+        self.response.out.write(template.render())
 
 
 class MirrorHandler(BaseHandler):
@@ -176,7 +175,7 @@ class MirrorHandler(BaseHandler):
         if raw_address == translated_address and 'Referer' in self.request.headers:
             referer = transform_content.decodeUrl(self.request.headers['Referer'])
             refmo = re.search(r"://[^/]+/+([^/]+)", referer)
-            if refmo != None:
+            if refmo is not None:
                 refbase = refmo.group(1);
                 if base_url != refbase:
                     logging.debug("Basing address on: %s", refbase)
@@ -256,18 +255,40 @@ class ProxyServerHandler(BaseHandler):
             self.response.out.write(content)
         self.response.set_status(cres.status_code)
 
+class YoutubeHandler(webapp.RequestHandler):
+
+    def get(self, videoid):
+        logging.info("Downloading video '%s'", videoid)
+
+        resp = urlfetch.fetch('http://www.youtube.com/get_video_info?&video_id=' + videoid)
+        if hasattr(urlparse, 'parse_qs'):
+            parse_qs = urlparse.parse_qs
+        else:
+            parse_qs = cgi.parse_qs
+        infomap = parse_qs(resp.content.decode('utf-8'))
+        #token = infomap['token'][0]
+        #url = "https://www.youtube.com/get_video?" + urllib.urlencode({'video_id': videoid, 't': token, 'fmt': '18', 'asv': 2})
+        url_stream = parse_qs(infomap['url_encoded_fmt_stream_map'][0])
+        url = url_stream['url'][0]
+        #logging.info(url_stream['url'])
+        logging.info("Downloading '%s'", url)
+        resp = urlfetch.fetch(url)
+
+        for key, value in resp.headers.iteritems():
+            if key not in IGNORE_HEADERS:
+                self.response.headers[key] = value
+        content = resp.content
+        if content:
+            logging.debug("Len: %dB", len(content))
+            self.response.out.write(content)
+        self.response.set_status(resp.status_code)
+
 
 app = webapp.WSGIApplication([
   (r"/", HomeHandler),
   (r"/main", HomeHandler),
   (r"/ps/.*", ProxyServerHandler),
+  (r"/ytb/(.+)", YoutubeHandler),
   (r"/.*", MirrorHandler)
 ], debug=DEBUG)
 
-
-def main():
-    wsgiref.handlers.CGIHandler().run(app)
-
-
-if __name__ == "__main__":
-    main()

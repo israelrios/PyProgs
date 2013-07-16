@@ -106,6 +106,8 @@ def encodeUrl(url):
     return url.replace('.', URL_PREFIX)
 
 def decodeUrl(url):
+    if url is None:
+        return ""
     return url.replace(URL_PREFIX, '.')
 
 def transformUrl(mo, replacement, urltype, base_url, accessed_dir):
