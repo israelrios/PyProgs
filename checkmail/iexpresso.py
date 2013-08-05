@@ -357,7 +357,7 @@ class ExpressoManager:
             if success:
                 self.jsonKey = ret.jsonKey
                 self.userAccount = ret.account
-                ret = self.callExpresso("Felamimail.getRegistryData");
+                ret = self.callExpresso("Expressomail.getRegistryData");
                 self.account = ret.accounts.results[0]
                 self.supportedFlags = set([flag.id for flag in ret.supportedFlags.results])
         except Exception as e:
@@ -389,7 +389,7 @@ class ExpressoManager:
 
     def _callSearchFolders(self, parent):
         # searchFolders($filter)
-        return self.callExpresso("Felamimail.searchFolders", [{"field":"account_id", "operator":"equals", "value":self.account.id},
+        return self.callExpresso("Expressomail.searchFolders", [{"field":"account_id", "operator":"equals", "value":self.account.id},
                                                               {"field":"globalname", "operator":"equals", "value":parent}])
 
     def _listFoldersRec(self, parent):
@@ -413,17 +413,17 @@ class ExpressoManager:
         self._initFolderMap()
         parts = path.split('/')
         # addFolder($name, $parent, $accountId)
-        newfolder = self.callExpresso("Felamimail.addFolder", parts[-1], "/".join(parts[:-1]), self.account.id)
+        newfolder = self.callExpresso("Expressomail.addFolder", parts[-1], "/".join(parts[:-1]), self.account.id)
         self.foldermap[newfolder.globalname] = newfolder
 
     def deleteFolder(self, path):
         """ Cuidado! Exclui também as mensagens que estão dentro da pasta """
         # deleteFolder($folder, $accountId)
-        self.callExpresso("Felamimail.deleteFolder", path, self.account.id)
+        self.callExpresso("Expressomail.deleteFolder", path, self.account.id)
 
     def getFullMsgs(self, msgsid):
         # downloadMessage($messageId)
-        response = self.openUrl(self.urlIndex, {"method": "Felamimail.downloadMessage", "requestType": "HTTP",
+        response = self.openUrl(self.urlIndex, {"method": "Expressomail.downloadMessage", "requestType": "HTTP",
                                                 "messageId": joinstr(msgsid)}, True)
         msgs = {}
 
@@ -463,7 +463,7 @@ class ExpressoManager:
             log(ret.__dict__)
             raise Exception(_("Import failed."))
         # importMessage($accountId,$folderId, $file)
-        ret = self.callExpresso("Felamimail.importMessage", self.account.id, self.foldermap[msgfolder].id, ret.tempFile.path)
+        ret = self.callExpresso("Expressomail.importMessage", self.account.id, self.foldermap[msgfolder].id, ret.tempFile.path)
 
     def _makeExpressoFlags(self, flags):
         return replaceinset(set(flags), '$Forwarded', 'Passed') & self.supportedFlags
@@ -472,13 +472,13 @@ class ExpressoManager:
         flags = self._makeExpressoFlags(flags)
         if len(flags) > 0:
             # addFlags($filterData, $flags)
-            self.callExpresso("Felamimail.addFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
+            self.callExpresso("Expressomail.addFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
 
     def clearFlags(self, msgids, flags):
         flags = self._makeExpressoFlags(flags)
         if len(flags) > 0:
             # clearFlags($filterData, $flags)
-            self.callExpresso("Felamimail.clearFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
+            self.callExpresso("Expressomail.clearFlags", [{"field":"id", "operator":"in", "value": msgids}], flags)
 
     def calcHashId(self, msg):
         m = hashlib.md5()
@@ -507,7 +507,7 @@ class ExpressoManager:
         start = 0
         while True:
             # searchMessages($filter, $paging)
-            ret = self.callExpresso("Felamimail.searchMessages", filterParam, {"sort":"received", "dir":"DESC", "start":start, "limit":limit})
+            ret = self.callExpresso("Expressomail.searchMessages", filterParam, {"sort":"received", "dir":"DESC", "start":start, "limit":limit})
 
             for msg in ret.results:
                 msg.flags = replaceinset(set(msg.flags), 'Passed', '$Forwarded')
@@ -535,12 +535,12 @@ class ExpressoManager:
     def updateQuota(self):
         self._initFolderMap()
         # updateMessageCache($folderId, $time)
-        self.foldermap['INBOX'] = self.callExpresso("Felamimail.updateMessageCache", self.foldermap['INBOX'].id, 180)
+        self.foldermap['INBOX'] = self.callExpresso("Expressomail.updateMessageCache", self.foldermap['INBOX'].id, 180)
 
     def moveMsgs(self, msgids, newfolder):
         self._initFolderMap()
         # moveMessages($filterData, $targetFolderId)
-        folders = self.callExpresso("Felamimail.moveMessages", [{"field":"id", "operator":"in", "value": msgids}], self.foldermap[newfolder].id)
+        folders = self.callExpresso("Expressomail.moveMessages", [{"field":"id", "operator":"in", "value": msgids}], self.foldermap[newfolder].id)
         for folder in folders:
             self.foldermap[folder.globalname] = folder
 
@@ -550,7 +550,7 @@ class ExpressoManager:
 
     def autoClean(self):
         # deleteMsgsBeforeDate($accountId)
-        ret = self.callExpresso("Felamimail.deleteMsgsBeforeDate", self.account.id)
+        ret = self.callExpresso("Expressomail.deleteMsgsBeforeDate", self.account.id)
         log( "AutoClean response:", ret.msgs )
 
 
