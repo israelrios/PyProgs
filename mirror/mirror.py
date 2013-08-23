@@ -25,7 +25,6 @@ import re
 import os
 import urllib
 import urlparse
-import wsgiref.handlers
 
 from google.appengine.api import urlfetch
 import webapp2 as webapp
@@ -44,9 +43,9 @@ DEBUG = False
 EXPIRATION_DELTA_SECONDS = 3600
 EXPIRATION_RECENT_URLS_SECONDS = 90
 
-## DEBUG = True
-## EXPIRATION_DELTA_SECONDS = 10
-## EXPIRATION_RECENT_URLS_SECONDS = 1
+# # DEBUG = True
+# # EXPIRATION_DELTA_SECONDS = 10
+# # EXPIRATION_RECENT_URLS_SECONDS = 1
 
 HTTP_PREFIX = "http://"
 HTTPS_PREFIX = "http://"
@@ -118,7 +117,7 @@ class Client(object):
                 logging.debug('Doing Post...')
                 self.response = urlfetch.fetch(mirrored_url, payload=rdata, method=urlfetch.POST, headers=rheaders, follow_redirects=False, deadline=10)
             else:
-                #logging.debug("Cookie: %s", rheaders.get('Cookie', ''))
+                # logging.debug("Cookie: %s", rheaders.get('Cookie', ''))
                 self.response = urlfetch.fetch(mirrored_url, headers=rheaders, follow_redirects=False, deadline=10)
         except (urlfetch.Error, apiproxy_errors.Error):
             logging.exception("Could not fetch URL")
@@ -150,18 +149,17 @@ class HomeHandler(BaseHandler):
             if inputted_url.startswith(HTTP_PREFIX):
                 inputted_url = inputted_url[len(HTTP_PREFIX):]
 
-            return self.redirect("/" + transform_content.encodeUrl(inputted_url) )
+            return self.redirect("/" + transform_content.encodeUrl(inputted_url))
 
         template = jinja_env.get_template('main.html')
-        self.response.out.write(template.render())
+        self.response.write(template.render())
 
 
 class MirrorHandler(BaseHandler):
-    def post(self):
-        return self.get()
+    def post(self, url):
+        return self.get(url)
 
-    def get(self):
-        raw_address = self.get_relative_url()[1:]  # remove leading /
+    def get(self, raw_address):
         if raw_address == 'favicon.ico' or raw_address == 'none':
             return self.error(404)
 
@@ -171,7 +169,7 @@ class MirrorHandler(BaseHandler):
 
         assert base_url
 
-        #check for request without a base path, includes the referer base path if necessary
+        # check for request without a base path, includes the referer base path if necessary
         if raw_address == translated_address and 'Referer' in self.request.headers:
             referer = transform_content.decodeUrl(self.request.headers['Referer'])
             refmo = re.search(r"://[^/]+/+([^/]+)", referer)
@@ -202,13 +200,13 @@ class MirrorHandler(BaseHandler):
         for key, value in cres.headers.iteritems():
             if key not in IGNORE_HEADERS:
                 if key.lower() == 'location':
-                    #redirection
+                    # redirection
                     if not value.startswith('http://') and not value.startswith('https://'):
                         logging.debug('Adjusting Location: %s', value)
                         value = urlparse.urljoin(mirrored_url, value)
 
                     logging.debug("Location: %s", value)
-                    value = urlparse.urljoin(self.request.uri, transform_content.encodeUrl( re.sub(r"^https?://", "/", value) ) )
+                    value = urlparse.urljoin(self.request.uri, transform_content.encodeUrl(re.sub(r"^https?://", "/", value)))
                     logging.info("Redirecting to '%s'", value)
                 self.response.headers[key] = value
 
@@ -221,19 +219,26 @@ class MirrorHandler(BaseHandler):
                     content = transform_content.TransformContent(base_url, mirrored_url, content)
                     break
             logging.debug("Len: %dB", len(content))
-            self.response.out.write(content)
+            self.response.write(content)
 
         self.response.set_status(cres.status_code)
 
 
 class ProxyServerHandler(BaseHandler):
-    def post(self):
-        return self.get()
+    def post(self, url):
+        return self.get(url)
 
-    def get(self):
-        url = self.get_relative_url()[4:]  # remove leading /ps/
-        pos = url.find('-')
-        url = url[:pos] + '://' + url[pos+1:]
+    def getContent(self, response):
+        return response.content
+
+
+    def writeHeaders(self, cres):
+        for key, value in cres.headers.iteritems():
+            if key not in IGNORE_HEADERS:
+                self.response.headers[key] = value
+
+    def get(self, url):
+        url = url.replace('-', '://', 1)
         mirrored_url = transform_content.decodeUrl(url)
 
         base_url = re.search(r"/*([^/]+)", mirrored_url).group(1);
@@ -246,14 +251,20 @@ class ProxyServerHandler(BaseHandler):
             return self.error(404)
 
         cres = client.response
-        for key, value in cres.headers.iteritems():
-            if key not in IGNORE_HEADERS:
-                self.response.headers[key] = value
-        content = cres.content
+        self.writeHeaders(cres)
+        content = self.getContent(cres)
         if content:
             logging.debug("Len: %dB", len(content))
-            self.response.out.write(content)
+            self.response.write(content)
         self.response.set_status(cres.status_code)
+
+
+class XorProxyServerHandler(ProxyServerHandler):
+
+    def getContent(self, cres):
+        content = ProxyServerHandler.getContent(self, cres)
+        return ''.join([chr(ord(i) ^ 0xF3) for i in content])
+
 
 class YoutubeHandler(webapp.RequestHandler):
 
@@ -266,11 +277,11 @@ class YoutubeHandler(webapp.RequestHandler):
         else:
             parse_qs = cgi.parse_qs
         infomap = parse_qs(resp.content.decode('utf-8'))
-        #token = infomap['token'][0]
-        #url = "https://www.youtube.com/get_video?" + urllib.urlencode({'video_id': videoid, 't': token, 'fmt': '18', 'asv': 2})
+        # token = infomap['token'][0]
+        # url = "https://www.youtube.com/get_video?" + urllib.urlencode({'video_id': videoid, 't': token, 'fmt': '18', 'asv': 2})
         url_stream = parse_qs(infomap['url_encoded_fmt_stream_map'][0])
         url = url_stream['url'][0]
-        #logging.info(url_stream['url'])
+        # logging.info(url_stream['url'])
         logging.info("Downloading '%s'", url)
         resp = urlfetch.fetch(url)
 
@@ -280,15 +291,16 @@ class YoutubeHandler(webapp.RequestHandler):
         content = resp.content
         if content:
             logging.debug("Len: %dB", len(content))
-            self.response.out.write(content)
+            self.response.write(content)
         self.response.set_status(resp.status_code)
 
 
 app = webapp.WSGIApplication([
   (r"/", HomeHandler),
   (r"/main", HomeHandler),
-  (r"/ps/.*", ProxyServerHandler),
+  (r"/ps/(.+)", ProxyServerHandler),
+  (r"/xps/(.+)", XorProxyServerHandler),
   (r"/ytb/(.+)", YoutubeHandler),
-  (r"/.*", MirrorHandler)
+  (r"/(.+)", MirrorHandler)
 ], debug=DEBUG)
 
