@@ -76,7 +76,10 @@ def unserialize(text):
         def __init__(self, entries):
             self.__dict__.update(entries)
 
-    return json.loads(text.decode('utf-8'), object_hook=lambda x: JSONObj(x))
+    try:
+        return json.loads(text.decode('utf-8'), object_hook=lambda x: JSONObj(x))
+    except ValueError as e:
+        raise InvalidReponseError(unicode(e))
 
 def json_default(obj):
     if isinstance(obj, set):
@@ -241,6 +244,9 @@ class SessionExpiredError(IExpressoError):
     def __init__(self):
         IExpressoError.__init__(self, _(u"Session Expired."))
 
+class InvalidReponseError(IExpressoError):
+    pass
+
 class LoginError(IExpressoError):
     '''
     Exception thrown upon login failures.
@@ -281,12 +287,12 @@ class ExpressoManager:
                 return cookie.value
         return None
 
-    def _reconnectDecor(self, func, *args, **kwargs):
+    def _reconnectDecor(self, func):
         def call(*args, **kwargs):
             self.reconnectDecorCount += 1
             try:
                 return func(*args, **kwargs)
-            except SessionExpiredError:
+            except (SessionExpiredError, InvalidReponseError):
                 if self.reconnectDecorCount > 1:
                     raise
                 log( "Session expired. Reconnecting..." )
