@@ -27,6 +27,11 @@ from email.generator import Generator as EmailGenerator
 import imaplib
 import hashlib
 
+import socket
+
+CON_TIMEOUT = 60  # seconds
+socket.setdefaulttimeout(CON_TIMEOUT)  # in seconds
+
 #diretório das configurações e do log
 iexpressodir = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.iexpresso')
 logfile = os.path.join(iexpressodir, 'log.txt')
@@ -313,7 +318,7 @@ class ExpressoManager:
             params = None
         #log( surl )
         sessionid = self._getCookie("TINE20SESSID")
-        response = self.opener.open(surl, params)
+        response = self.opener.open(surl, params, timeout=CON_TIMEOUT)
         # reconnects when the session id changes
         if self.logged and sessionid != self._getCookie("TINE20SESSID"):
             self.logged = False
@@ -354,7 +359,7 @@ class ExpressoManager:
         success = False
         try:
             self._reset()
-            response = self.opener.open(self.urlExpresso)
+            response = self.opener.open(self.urlExpresso, timeout=CON_TIMEOUT)
             response.read()
             response.close()
             # login($username, $password, $securitycode=NULL)
@@ -952,6 +957,32 @@ class MailSynchronizer():
             mailmessage.setMessageId(newid)
             return newid + mailmessage.getSender()
 
+    def loadExpressoMessagesById(self, localdb, edb, folder_id, todownload):
+        if len(todownload) == 0:
+            return
+        newmsgs = self.es.getFullMsgs([msg.id for msg in todownload])
+        # importa as mensagens no imap local
+        for msg in todownload:
+            if msg.id in newmsgs:
+                eflags = msg.flags & self.relevantFlags
+                mailmessage = MailMessage(newmsgs[msg.id])
+                dbid = self.getDbId(mailmessage, True)
+                strflags = '(' + ' '.join(eflags) + ')'
+                log('  ', msg.id, strflags, dbid)
+                if not self.db.exists(dbid):
+                    if not localdb.exists(dbid):
+                        self.createLocalFolder(folder_id)
+                        mailmessage.fixSubjectBrokenWord()
+                        typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), strflags, None, mailmessage.msgsrc)
+                        checkImapError(typ, resp)  # insert a dummy record that can't be used to update local imap
+                        localdb.setUpdated()
+                    self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+                    self.unstale(dbid)
+                edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)  # re-verifica se todas as mensagens foram baixadas
+
+        if len(newmsgs) != len(todownload):
+            raise Exception(_('Error loading messages from Expresso.'))
+
     def loadExpressoMessages(self, criteria, localdb, folders):
         edb = MsgList()
         for folder_id in folders:
@@ -972,31 +1003,9 @@ class MailSynchronizer():
                 else:
                     todownload.append(msg)
 
-            if len(todownload) > 0:
-                newmsgs = self.es.getFullMsgs([msg.id for msg in todownload])
-
-                #importa as mensagens no banco
-                for msg in todownload:
-                    if msg.id in newmsgs:
-                        eflags = msg.flags & self.relevantFlags 
-                        mailmessage = MailMessage( newmsgs[msg.id] )
-                        dbid = self.getDbId(mailmessage, True)
-                        strflags = '(' + ' '.join(eflags) + ')'
-                        log( '  ', msg.id, strflags, dbid ) #fullmsg['Subject'] )
-                        if not self.db.exists(dbid):
-                            if not localdb.exists(dbid):
-                                self.createLocalFolder(folder_id)
-                                mailmessage.fixSubjectBrokenWord()
-                                typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), strflags, None, mailmessage.msgsrc)
-                                checkImapError(typ, resp)
-                                # insert a dummy record that can't be used to update local imap
-                                localdb.setUpdated()
-                            self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
-                            self.unstale(dbid)
-                        edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
-                #re-verifica se todas as mensagens foram baixadas
-                if len(newmsgs) != len(todownload):
-                    raise Exception(_('Error loading messages from Expresso.'))
+            chunksize = 100
+            for i in xrange(0, len(todownload), chunksize):
+                self.loadExpressoMessagesById(localdb, edb, folder_id, todownload[i:i + chunksize])
         return edb
 
     def checkSignature(self, localdb):
