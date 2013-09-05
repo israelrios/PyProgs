@@ -860,12 +860,13 @@ class MailSynchronizer():
         self.client.append(self.metadataFolder, '(\\Seen)', None, msgToStr(msg))
 
     def saveDb(self):
-        f = open(self.dbpath, 'w+b')
+        tmpname = self.dbpath + '.tmp'
+        f = open(tmpname, 'w+b')
         try:
             self.db.save(f)
-            #cPickle.dump(self.db, f, 2)
         finally:
             f.close()
+        os.rename(tmpname, self.dbpath)
 
     def loadDb(self):
         log( 'Loading DB...' )
