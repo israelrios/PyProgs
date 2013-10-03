@@ -42,6 +42,8 @@ class RequestProcessor(object):
         self.cookies = []
 
     def _getProc(self):
+        if self.proc is not None and not self.proc.is_alive():
+            self.reset()
         if self.proc is None:
             self.requests = multiprocessing.Queue(maxsize=1)
             self.responses = multiprocessing.Queue(maxsize=1)
