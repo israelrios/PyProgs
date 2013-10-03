@@ -5,12 +5,11 @@
 
 import imap4utf7 # pro codec imap4-utf-7 @UnusedImport
 
-from monutil import decode_header, MultipartPostHandler
+from monutil import decode_header
 
 import sys
 import urllib
 import urllib2
-import cookielib
 import re
 import os
 import datetime
@@ -28,6 +27,7 @@ import imaplib
 import hashlib
 
 import socket
+from requestprocessor import RequestProcessor
 
 CON_TIMEOUT = 60  # seconds
 socket.setdefaulttimeout(CON_TIMEOUT)  # in seconds
@@ -268,6 +268,7 @@ class ExpressoManager:
         self.user = user
         self.passwd = passwd
         self.foldermap = None
+        self.requestProcessor = None
         self._reset()
         self.callExpresso = self._reconnectDecor(self._callExpresso)
         self.importMsg = self._reconnectDecor(self.importMsg)
@@ -277,19 +278,25 @@ class ExpressoManager:
     def _reset(self):
         """ Limpa os atributos da conexão. Este método também é chamado durante o logout. """
         self.callid = 0
-        self.logged = False
+        self._logged = False
         self.jsonKey = ''
 
         #Inicialização
-        self.cookies = cookielib.CookieJar() #cookies são necessários para a autenticação
-        self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cookies), MultipartPostHandler )
-        self.opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.81 Safari/537.1'),
-                                  ('Origin', self.urlExpresso), ('Referer', self.urlExpresso)]
+        if self.requestProcessor is not None:
+            self.requestProcessor.reset()
+        else:
+            self.requestProcessor = RequestProcessor(
+              [('User-agent', 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.81 Safari/537.1'),
+               ('Origin', self.urlExpresso), ('Referer', self.urlExpresso)])
+
+    @property
+    def logged(self):
+        return self._logged and not self.requestProcessor.reseted
 
     def _getCookie(self, name):
-        for cookie in self.cookies:
-            if cookie.name == name:
-                return cookie.value
+        for (cookieName, cookieValue) in self.requestProcessor.cookies:
+            if cookieName == name:
+                return cookieValue
         return None
 
     def _reconnectDecor(self, func):
@@ -318,10 +325,10 @@ class ExpressoManager:
             params = None
         #log( surl )
         sessionid = self._getCookie("TINE20SESSID")
-        response = self.opener.open(surl, params, timeout=CON_TIMEOUT)
+        response = self.requestProcessor.open(surl, params)
         # reconnects when the session id changes
         if self.logged and sessionid != self._getCookie("TINE20SESSID"):
-            self.logged = False
+            self._logged = False
             raise SessionExpiredError()
         return response
 
@@ -359,7 +366,7 @@ class ExpressoManager:
         success = False
         try:
             self._reset()
-            response = self.opener.open(self.urlExpresso, timeout=CON_TIMEOUT)
+            response = self.requestProcessor.open(self.urlExpresso)
             response.read()
             response.close()
             # login($username, $password, $securitycode=NULL)
@@ -374,7 +381,7 @@ class ExpressoManager:
         except Exception as e:
             raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Error:") + "\n\n" + unicode(e))
         finally:
-            self.logged = success
+            self._logged = success
         if not self.logged:
             raise LoginError(_(u"It was not possible to connect at Expresso.") + " " + _(u"Check your password."))
 
