@@ -12,7 +12,7 @@ rm -rf $optdir
 
 dir="$basedir/iexpresso"
 mkdir -p $dir
-cp -a {monitors,expresso,checkmail,iexpresso,imap4utf7,monutil,imapcheckmail}.py $dir
+cp -a {monitors,expresso,checkmail,iexpresso,imap4utf7,monutil,imapcheckmail,requestprocessor}.py $dir
 cp -a {mail-read.png,mail-unread.{png,svg}} $dir
 cp -a iexpresso-auto.desktop $dir
 cp -a dovecot*.conf $dir
