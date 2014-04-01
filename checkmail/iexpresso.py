@@ -1108,6 +1108,13 @@ class MailSynchronizer():
                 self.closeLocalFolder()
 
             self.db.clearStats()
+        except Exception as e:
+            logError()
+            # Tratando caso onde a mensagem não está mais no servidor. Faz um full refresh.
+            if isinstance(e, Exception) and not re.search(r'Message number \S+ not found', e.message, re.IGNORECASE) is None:
+                self.loadAllMsgs()
+                return
+            raise
         except:
             logError()
             raise
