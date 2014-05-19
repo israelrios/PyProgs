@@ -94,7 +94,7 @@ class DirNav(object):
                 sop = raw_input("Option: ").lower().strip()
                 if sop == '':
                     continue
-                if sop == 'b' or sop == 'u':
+                if sop == 'b' or sop == 'u' or sop == 'up' or sop == 'back':
                     if len(self.stack) > 0:
                         self.dir = self.stack.pop()
                         break
