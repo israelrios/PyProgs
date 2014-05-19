@@ -10,3 +10,4 @@ checkmail/smtpconf
 .classpath
 .pydevproject
 .settings
+*.deb
