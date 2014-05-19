@@ -6,3 +6,5 @@ debrepo/deb/db
 debrepo/deb/dists
 debrepo/deb/pool
 checkmail/smtpconf
+.project
+.classpath
