@@ -8,3 +8,5 @@ debrepo/deb/pool
 checkmail/smtpconf
 .project
 .classpath
+.pydevproject
+.settings
