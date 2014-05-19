@@ -462,6 +462,7 @@ class MonApp:
         self.name = 'Monitors'
         self.iconFile = None
         self.configFile = "." + appid + ".cfg"
+        self.autoQuit = True # indica se a aplicação deve ser finalizada quando todas as threads de serviço forem finalizadas
         syslog.openlog(appid)
         gobject.threads_init()
         #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
@@ -494,7 +495,8 @@ class MonApp:
         for t in self.services:
             if t.running():
                 return
-        gobject.idle_add(gtk.main_quit)
+        if self.autoQuit:
+            gobject.idle_add(gtk.main_quit)
 
     def quit(self, wait = True):
         running = False
@@ -503,7 +505,7 @@ class MonApp:
                 running = True
             t.quit()
 
-        if not running:
+        if not running and self.autoQuit:
             try:
                 gtk.main_quit()
             except:
@@ -518,12 +520,13 @@ class MonApp:
     def saveyourself(self, *args): #phase, save_style, is_shutdown, interact_style, is_fast):
         """ Chamado pelo gnome antes de fechar a sessão.
             O correto seria só salvar os dados e não fechar o programa. """
+        self.autoQuit = False # neste momento só devemos salvar o estado e não fechar o app
         self.quit(True)
         return True
 
     def die(self, *args):
+        self.autoQuit = True
         self.quit(True)
-        return True
 
     def handlesigterm(self, signum, frame):
         if signum == signal.SIGTERM:
