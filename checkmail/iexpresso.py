@@ -100,17 +100,18 @@ patBrokenEncWord = re.compile( r'=\?([^][\000-\040()<>@,\;:*\"/?.=]+)(?:\*[^?]+)
                                r'(B\?[+/0-9A-Za-z]*\r*\n[ \t][+/0-9A-Za-z]*=*'
                                r'|Q\?[ ->@-~]*\r*\n[ \t][ ->@-~]*'
                                r')\?=', re.MULTILINE | re.IGNORECASE)
+patFrom = re.compile(r'^From:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
 patSubject = re.compile(r'^Subject:((?:[ \t](.+?)\r*\n)+)', re.MULTILINE | re.IGNORECASE)
 patEmptyLine = re.compile(r'^\r*\n', re.MULTILINE | re.IGNORECASE)
-patSender = re.compile('^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
+patSender = re.compile(r'^Sender: (.+?)[\r\n]', re.MULTILINE | re.IGNORECASE)
 # empty Message-Id's wanted too
-patMessageId = re.compile('^Message-Id: (.*?)\n', re.MULTILINE | re.IGNORECASE)
+patMessageId = re.compile(r'^Message-Id: (.*?)\n', re.MULTILINE | re.IGNORECASE)
 #Date: Mon, 21 Jun 2010 10:16:39 -0300
 patDate = re.compile(
     r'^Date: (?:(?P<wday>[A-Z][a-z][a-z]), )?(?P<day>[0123]?[0-9])'
     r' (?P<mon>[A-Z][a-z][a-z]) (?P<year>[0-9][0-9][0-9][0-9])'
     r' (?P<hour>[0-9][0-9]):(?P<min>[0-9][0-9]):(?P<sec>[0-9][0-9])'
-    r' (?P<zonen>[-+])(?P<zoneh>[0-9][0-9])(?P<zonem>[0-9][0-9])[\r\n]', re.MULTILINE)
+    r' (?P<zonen>[-+])(?P<zoneh>[0-9][0-9])(?P<zonem>[0-9][0-9])[\r\n]', re.MULTILINE | re.IGNORECASE)
 
 def fixEncodedWord(subject):
     return patBrokenEncWord.sub(lambda m: re.sub(r'(\r*\n[ \t]| (?=_))', '', m.group()), subject)
@@ -445,9 +446,10 @@ class ExpressoManager:
                                                 "messageId": joinstr(msgsid)}, True)
         msgs = {}
 
-        def addmsg(filename, source):
-            # formato do nome ID.eml, extraí o ID do nome do arquivo
-            if "From:" in source: msgs[filename[: -4]] = source
+        def addmsg(msgfilename, source):
+            # valida o source e extraí o ID do nome do arquivo (formato do nome ID.eml)
+            if patFrom.search(source) is not None or patSubject.search(source) is not None:
+                msgs[msgfilename[: -4]] = source
 
         try:
             filename = response.info()['Content-Disposition'].split("=")[1].strip('"')
@@ -502,13 +504,14 @@ class ExpressoManager:
         m = hashlib.md5()
         if msg.content_type is not None:
             m.update(msg.content_type.encode('utf-8') + '@')
-        if msg.sent is not None:
+        if hasattr(msg, "sent") and msg.sent is not None:
             m.update(msg.sent.encode('utf-8') + '@')
-        if msg.from_email is not None:
+        if hasattr(msg, "from_email") and msg.from_email is not None:
             m.update(msg.from_email.encode('utf-8') + '@')
-        for item in (msg.to or []):
-            m.update(item.encode('utf-8') + '@')
-        if msg.subject is not None:
+        if hasattr(msg, "to"):
+            for item in (msg.to or []):
+                m.update(item.encode('utf-8') + '@')
+        if hasattr(msg, "subject") and msg.subject is not None:
             m.update(msg.subject.encode('utf-8') + '@')
         m.update(str(msg.size))
         return m.hexdigest()
@@ -982,12 +985,15 @@ class MailSynchronizer():
                         self.createLocalFolder(folder_id)
                         mailmessage.fixSubjectBrokenWord()
                         typ, resp = self.client.append(folder_id.encode('imap4-utf-7'), strflags, None, mailmessage.msgsrc)
-                        checkImapError(typ, resp)  # insert a dummy record that can't be used to update local imap
+                        checkImapError(typ, resp)
                         localdb.setUpdated()
                     self.db.update(dbid, msg.id, folder_id, eflags, msg.hashid)
                     self.unstale(dbid)
-                edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)  # re-verifica se todas as mensagens foram baixadas
+                edb.update(dbid, msg.id, folder_id, eflags, msg.hashid)
+            else:
+                log( "** Not found:", msg.id, msg.subject )
 
+        # verifica se todas as mensagens foram baixadas
         if len(newmsgs) != len(todownload):
             raise Exception(_('Error loading messages from Expresso.'))
 
@@ -1217,7 +1223,7 @@ class MailSynchronizer():
                         self.es.deleteFolder(efolder)
                         self.db.folders.remove(efolder)
                     else:
-                        log( "Expresso folder '%s' has messages. Not removing." )
+                        log( "Expresso folder '%s' has messages. Not removing." % efolder )
                 else:
                     self.createLocalFolder(efolder)
 
