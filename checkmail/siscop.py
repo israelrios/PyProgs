@@ -87,7 +87,7 @@ class SisCopService(Service):
     def buildOpener(self):
         cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar))
-        opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.81 Safari/537.1')]
+        opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686; rv:35.0) Gecko/20100101 Firefox/35.0')]
         return (opener, cookiejar)
 
     def createTrayIcon(self):
@@ -97,6 +97,11 @@ class SisCopService(Service):
         if self != threading.currentThread():
             # não faz nada se chamado de outra thread
             return
+        if timered:
+            # não roda de madrugada
+            hour = datetime.datetime.today().hour
+            if hour >= 20 or hour <= 6:
+                return
         # o valor de refreshMinutes pode ser alterado em self.check()
         status = self.check()
         self.setIcon(status)
