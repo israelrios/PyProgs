@@ -16,8 +16,8 @@ import threading
 import gtk
 import re
 import tempfile
-import gobject
 import sys
+import subprocess
 
 SEC_HOUR = 60*60 # 1 hora em segundos
 
@@ -83,7 +83,6 @@ class SisCopService(Service):
         self.lastPageId = None
         self.logged = False
         self.captchaValue = None
-        self.decodingCaptcha = False
 
     def buildOpener(self):
         cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
@@ -95,10 +94,11 @@ class SisCopService(Service):
         return SisCopTrayIcon(self)
 
     def runService(self, timered=True):
+        if self != threading.currentThread():
+            # não faz nada se chamado de outra thread
+            return
         # o valor de refreshMinutes pode ser alterado em self.check()
         status = self.check()
-        if status == NOT_LOGGED and not timered:
-            gobject.idle_add(self.decodeCaptcha)
         self.setIcon(status)
 
     def showPage(self, pageId=None):
@@ -137,8 +137,14 @@ class SisCopService(Service):
                 pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
 
     def decodeCaptcha(self):
-        if self.decodingCaptcha:
-            return
+        self.captchaValue = None
+        for i in range(10):
+            decoded = self.tryDecodeCaptcha()
+            if decoded is not None:
+                self.captchaValue = decoded
+                break
+
+    def tryDecodeCaptcha(self):
         self.tempOpener, self.tempCookiejar = self.buildOpener()
         html = self.tempOpener.open(self.urlLogin).read()
         # get the viewstate value
@@ -149,13 +155,12 @@ class SisCopService(Service):
         fname = os.path.join(tempfile.gettempdir(), "siscop{0}.captcha.jpg".format(self.user))
         with open(fname, 'w') as f:
             f.write(self.tempOpener.open(self.urlSisCop + decode_htmlentities(mo.group(1))).read())
-        self.decodingCaptcha = True
-        wnd = CaptchaWindow(self, fname)
-        wnd.connect("destroy", self.captchaWindowClosed)
-        wnd.run()
+        decoded = subprocess.check_output(['java', '-jar', '/opt/capres/capres.jar', fname])
+        decoded = decoded.strip()
+        if len(decoded) != 5:
+            return None
+        return decoded
 
-    def captchaWindowClosed(self, wnd):
-        self.decodingCaptcha = False
 
     def checkLogged(self, url):
         self.logged = not url.geturl().startswith(self.urlLogin)
@@ -170,18 +175,26 @@ class SisCopService(Service):
     def login(self):
         if self.logged:
             return True
-        if self.captchaValue is None:
-            return False
+        for i in range(5):
+            self.decodeCaptcha()
+            if self.captchaValue is None:
+                return False
+            url = self.tryLogin()
+            if 'Sequência de caracteres não confere' in url.read().decode('cp1252'):
+                continue
+            if self.checkLogged(url):
+                self.saveCookies()
+            break
+        return self.logged
+
+    def tryLogin(self):
         self.opener = self.tempOpener
         self.cookiejar = self.tempCookiejar
         self.fields['captcha'] = self.captchaValue
         self.captchaValue = None
         self.tempOpener = None
         self.tempCookiejar = None
-        url = self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
-        if self.checkLogged(url):
-            self.saveCookies()
-        return self.logged
+        return self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
 
     def getPageText(self):
         """ Faz o login no SISCOP. Download da página de registro de ponto. Extrai o texto do HTML da página. """
@@ -242,14 +255,19 @@ class SisCopService(Service):
 
     def check(self):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um período. """
-        #Atualiza a cada 5min
-        self.refreshMinutes = 5
+        #Atualiza a cada 40min
+        self.refreshMinutes = 40
         if not self.login():
             return NOT_LOGGED
         try:
             text = self.getPageText()
         except NotLoggedException:
-            return NOT_LOGGED
+            if not self.login():
+                return NOT_LOGGED
+            try:
+                text = self.getPageText()
+            except NotLoggedException:
+                return NOT_LOGGED
 
         self.timeReturn = None
 
@@ -290,104 +308,14 @@ class SisCopService(Service):
                         else:
                             shour = parts[1].strip().split(':')
                             today = datetime.date.today()
-                            return datetime.datetime(year = today.year, month = today.month,
-                                                        day = today.day, hour = int(shour[0]),
-                                                        minute = int(shour[1]))
+                            return datetime.datetime(year=today.year, month=today.month,
+                                                     day=today.day, hour=int(shour[0]),
+                                                     minute=int(shour[1]))
                     except:
                         raise Exception(u'SisCop - The page layout is unknown')
         #se chegar até aqui, é porque o layout é desconhecido
         raise Exception(u'SisCop - The page layout is unknown')
 
-#####################################################
-# CaptchaWindow
-class CaptchaWindow(gtk.Window):
-
-    def __init__(self, service, imgfilename):
-        self.service = service
-        gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
-
-        #self.set_size_request(250, 150)
-        self.set_border_width(10)
-        self.set_title("SisCop - Captcha")
-        self.set_position(gtk.WIN_POS_CENTER)
-        self.set_modal(True)
-
-        self.add(self.createControls())
-        self.okButton.grab_default()
-        self.img.set_from_file(imgfilename)
-        self.value.grab_focus()
-
-    def createImgAndValue(self):
-        # Create the img
-        self.img = gtk.Image()
-        self.img.show()
-
-        # Create the value entry box
-        valueLabel = gtk.Label(_("Value: "))
-        valueLabel.show()
-
-        self.value = gtk.Entry()
-        self.value.set_max_length(50)
-        self.value.connect("activate", self.login)
-        self.value.show()
-
-        table = gtk.Table(2, 2)
-        table.set_row_spacings(8)
-
-        table.attach(self.img, 0, 2, 0, 1, gtk.EXPAND, 0)
-        table.attach(valueLabel, 0, 1, 1, 2, gtk.FILL, 0)
-        table.attach(self.value, 1, 2, 1, 2, gtk.EXPAND | gtk.FILL, 0)
-
-        table.show()
-
-        return table
-
-    def createButtons(self):
-        self.okButton = gtk.Button(stock=gtk.STOCK_OK)
-        self.okButton.connect("clicked", self.login)
-        self.okButton.set_flags(gtk.CAN_DEFAULT)
-        self.okButton.show()
-
-        cancelButton = gtk.Button(stock=gtk.STOCK_CANCEL)
-        cancelButton.connect("clicked", self.cancel)
-        cancelButton.show()
-
-        bbox = gtk.HButtonBox()
-        bbox.set_layout(gtk.BUTTONBOX_EDGE)
-        bbox.pack_start(cancelButton, True, True, 0)
-        bbox.pack_end(self.okButton, True, True, 0)
-        bbox.show()
-
-        return bbox;
-
-    def createControls(self):
-        # Append login and pass entry box to vbox
-        mainbox = gtk.VBox(False, 0)
-        mainbox.set_spacing(15)
-        mainbox.pack_start(self.createImgAndValue(), True, True, 0)
-        mainbox.pack_end(self.createButtons(), False, True, 0)
-        mainbox.show()
-        return mainbox
-
-    def show(self):
-        # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
-        self.set_icon_from_file(os.path.join(curdir, 'siscop_idle.png'))
-        gtk.Window.show(self)
-
-    def cancel(self, wnd):
-        self.destroy()
-
-    def run(self):
-        self.show()
-
-    def login(self, wnd):
-        captcha = self.value.get_text().strip()
-        if len(captcha) == 0:
-            showMessage(_(u"Captcha value is required."), self.get_title(), self)
-            return
-        self.destroy()
-        self.service.captchaValue = captcha
-        self.service.refresh()
 
 ########################################
 # main
@@ -395,6 +323,7 @@ class CaptchaWindow(gtk.Window):
 if __name__ == '__main__':
     from monitors import MonApp, MonLoginWindow
     app = MonApp()
+    app.appid = 'scc'
     app.name = 'SisCop Checker'
     app.addService(SisCopService)
     MonLoginWindow(app).run()
