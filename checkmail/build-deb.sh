@@ -51,7 +51,7 @@ fakeroot dpkg-deb -b deb ..
 rm -rf $dir
 
 #upload
-if [ "$1" == '-upload' ]; then
+if [ "$1" == '--upload' ]; then
 	debrepo=../debrepo
 	reprepro -b $debrepo/deb/ remove stable iexpresso
 	reprepro -b $debrepo/deb/ includedeb stable "../iexpresso_${version}_all.deb" && \
