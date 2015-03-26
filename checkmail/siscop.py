@@ -113,7 +113,11 @@ class SisCopService(Service):
         if pageId is None or pageId != self.lastPageId:
             if pageId is not None:
                 self.lastPageId = pageId
-            #abre o browser com a página
+            # verifica se a sessão ainda é válida, senão faz login.
+            self.checkLogged(self.openUrlRegPonto())
+            if not self.logged:
+                self.login()
+            # abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
             if 'chrome' in procs:
                 if self.logged:
@@ -201,12 +205,15 @@ class SisCopService(Service):
         self.tempCookiejar = None
         return self.opener.open(self.urlLogin, urllib.urlencode(self.fields))
 
-    def getPageText(self):
-        """ Faz o login no SISCOP. Download da página de registro de ponto. Extrai o texto do HTML da página. """
+    def openUrlRegPonto(self):
         try:
-            url = self.opener.open(self.urlCadRegPonto)
+            return self.opener.open(self.urlCadRegPonto)
         except Exception, e:
             raise Exception(u"It was not possible to connect at SisCop. Error:\n\n" + str(e))
+
+    def getPageText(self):
+        """ Faz o login no SISCOP. Download da página de registro de ponto. Extrai o texto do HTML da página. """
+        url = self.openUrlRegPonto()
 
         self.checkLogged(url)
         if not self.logged:
