@@ -29,6 +29,8 @@ import hashlib
 import socket
 from requestprocessor import RequestProcessor
 
+import ldap
+
 CON_TIMEOUT = 60  # seconds
 socket.setdefaulttimeout(CON_TIMEOUT)  # in seconds
 
@@ -260,7 +262,7 @@ class LoginError(IExpressoError):
     pass
 
 class ExpressoManager:
-    urlExpresso = 'https://expressov3.serpro.gov.br'
+    urlExpresso = 'https://expressobr.serpro.gov.br'
     urlIndex = urlExpresso + '/index.php'
     urlUpload = urlIndex + '?method=Tinebase.uploadTempFile'
 
@@ -268,6 +270,7 @@ class ExpressoManager:
         # Os campos do formulário
         self.user = user
         self.passwd = passwd
+        self.email = None
         self.foldermap = None
         self.requestProcessor = None
         self._reset()
@@ -363,6 +366,17 @@ class ExpressoManager:
         self._checkRemoteError(ret)
         return ret.result
 
+    def _resolveUserEmail(self):
+        if self.email is not None:
+            return
+        l = ldap.initialize('ldap://slave-cta-reg.cta.serpro:389')
+        l.simple_bind_s('uid=estacao,ou=servicos,ou=corp,dc=serpro,dc=gov,dc=br', 'estacao@rlsl')
+        try:
+            result = l.search_s("dc=serpro,dc=gov,dc=br", ldap.SCOPE_SUBTREE, "uid=" + self.user, ["mail"])
+            self.email = result[0][1]['mail'][0]
+        finally:
+            l.unbind_s()
+
     def login(self):
         success = False
         try:
@@ -370,8 +384,9 @@ class ExpressoManager:
             response = self.requestProcessor.open(self.urlExpresso)
             response.read()
             response.close()
+            self._resolveUserEmail()
             # login($username, $password, $securitycode=NULL)
-            ret = self.callExpresso('Tinebase.login', self.user, self.passwd, '')
+            ret = self.callExpresso('Tinebase.login', self.email, self.passwd, '')
             success = ret.success
             if success:
                 self.jsonKey = ret.jsonKey

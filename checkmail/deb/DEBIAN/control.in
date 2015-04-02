@@ -5,7 +5,7 @@ Priority: optional
 Architecture: all
 Essential: no
 Installed-Size: 1024
-Depends: dovecot-imapd|bincimap, python, python-dbus, python-gtk2, python-notify
+Depends: dovecot-imapd|bincimap, python, python-dbus, python-gtk2, python-notify, python-ldap
 Recommends: python-gnome2
 Maintainer: Israel Rios <israel.rios@israelrios.com>
 Description: Checks for mail in expresso mail and put it in a local imap.
