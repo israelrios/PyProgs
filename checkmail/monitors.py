@@ -16,7 +16,7 @@ import tempfile
 import fcntl
 import gettext
 
-version = "3.4.0"
+version = "3.5.0"
 
 if 'http_proxy' in os.environ:
     del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
