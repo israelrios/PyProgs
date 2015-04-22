@@ -470,7 +470,8 @@ class ExpressoManager:
             filename = response.info()['Content-Disposition'].split("=")[1].strip('"')
             # case when just 1 message is returned, unzipped
             if filename.lower().endswith('.eml'):
-                addmsg(filename, response.read())
+                # quando é apenas uma mensagem o formato do nome é ID_.eml. Colocamos no padrão.
+                addmsg(re.sub(r'_\.eml$', '.eml', filename), response.read())
                 return msgs
 
             zfile = zipfile.ZipFile(StringIO(response.read()))
