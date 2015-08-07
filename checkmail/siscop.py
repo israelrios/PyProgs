@@ -64,7 +64,7 @@ class NotLoggedException(Exception):
 
 
 class SisCopService(Service):
-    urlSisCop = 'http://siscop.portalcorporativo.serpro'
+    urlSisCop = 'https://siscop.portalcorporativo.serpro'
     urlLogin = urlSisCop + '/cpf_senha.asp'
     urlCadRegPonto = urlSisCop + '/CadRegPonto.asp'
 
@@ -162,7 +162,7 @@ class SisCopService(Service):
         # get the captcha image url
         mo = re.search(r"src\s*=\s*'(/captcha/[^']+)'", html, re.DOTALL)
         fname = os.path.join(tempfile.gettempdir(), "siscop{0}.captcha.jpg".format(self.user))
-        with open(fname, 'w') as f:
+        with open(fname, 'wb') as f:
             f.write(self.tempOpener.open(self.urlSisCop + decode_htmlentities(mo.group(1))).read())
         decoded = subprocess.check_output(['java', '-jar', '/opt/capres/capres.jar', fname])
         decoded = decoded.strip()
