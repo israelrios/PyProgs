@@ -41,6 +41,8 @@ logfile = os.path.join(iexpressodir, 'log.txt')
 DEBUG_REQUESTS = False
 
 def log(*params):
+    if not os.path.exists(iexpressodir):
+        os.mkdir(iexpressodir)
     f = open(logfile, 'a+')
     printSpace = False
     for p in params:
@@ -1426,9 +1428,13 @@ class FlagsDiff:
         return len(self.added) == 0 and len(self.removed) == 0
 
 def getFolderPath(imapfolder):
-    p1 = imapfolder.rindex('"', 0)
-    p2 = imapfolder.rindex('"', 0, p1-1)
-    return imapfolder[p2 + 1:p1].decode('imap4-utf-7') # codec definido em imap4utf7
+    if imapfolder.endswith('"'):
+        p1 = len(imapfolder)-1
+        p2 = imapfolder.rindex('"', 0, p1 - 1)
+        folderName = imapfolder[p2 + 1:p1]
+    else:
+        folderName = imapfolder.split()[-1]
+    return folderName.decode('imap4-utf-7')  # codec definido em imap4utf7
 
 if __name__ == "__main__":
     import getpass

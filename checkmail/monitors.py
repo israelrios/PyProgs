@@ -60,7 +60,7 @@ class TrayIcon(gtk.StatusIcon):
         self.set_from_stock('gtk-dialog-error')
         self.set_tooltip(error)
         self.set_visible(True)
-    
+
     def setInitialIcon(self):
         self.set_from_stock('gtk-execute')
         self.set_tooltip(_("Loading - ") + self.service.name)
