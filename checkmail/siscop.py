@@ -1,9 +1,10 @@
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 # Autor: Israel Rios
 # Created: 15-abr-2009
 
 from monitors import Service, TrayIcon, curdir, showMessage
-from monutil import HtmlTextParser, execute, decode_htmlentities
+from monutil import HtmlTextParser, execute, decode_htmlentities, getProwl
 
 import os
 import urllib
@@ -35,6 +36,7 @@ class SisCopTrayIcon(TrayIcon):
     def prepareMenu(self, menu):
         TrayIcon.prepareMenu(self, menu)
         menu.append(self.createMenuItem(gtk.STOCK_CONNECT, self.onMenuConnect))
+        #menu.append(self.createMenuItem("Leave Alert", self.onMenuConnect))
 
     def onMenuConnect(self, event):
         self.service.decodeCaptcha()
@@ -81,8 +83,10 @@ class SisCopService(Service):
         #Atualiza a cada 5min
         self.refreshMinutes = 5
         self.lastPageId = None
+        self.lastProwl = None
         self.logged = False
         self.captchaValue = None
+        self.prowl = getProwl()
 
     def buildOpener(self):
         cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
@@ -105,6 +109,15 @@ class SisCopService(Service):
         # o valor de refreshMinutes pode ser alterado em self.check()
         status = self.check()
         self.setIcon(status)
+
+    def sendProwl(self, msg):
+        if self.prowl is None:
+            return
+
+        try:
+            self.prowl.post("Siscop", "", msg)
+        except:
+            print "Can't send to Prowl: " + sys.exc_info()[0]
 
     def showPage(self, pageId=None):
         if pageId is not None and self != threading.currentThread():
@@ -134,12 +147,17 @@ class SisCopService(Service):
             else:
                 execute(["firefox", self.urlLogin])
                 execute(["wmctrl", "-a", "Firefox"])
+        else:
+            # o usuário não registrou o ponto no horário adequado, envia um alerta via push
+            if self.lastProwl != pageId:
+                self.sendProwl("Registre o ponto")
+                self.lastProwl = pageId
 
         #verifica se o usuário está na máquina
         if pageId is not None:
-            bus = dbus.SessionBus()
-            ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
             try:
+                bus = dbus.SessionBus()
+                ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
                 # costuma demorar alguns segundos pra retornar
                 ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
             except:
@@ -174,7 +192,7 @@ class SisCopService(Service):
     def checkLogged(self, url):
         self.logged = not url.geturl().startswith(self.urlLogin)
         return self.logged
-    
+
     def saveCookies(self):
         cookiesFileName = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.siscop_cookies')
         with open(cookiesFileName, 'w') as f:
@@ -296,7 +314,7 @@ class SisCopService(Service):
         return PONTO_NOK
 
     def extractDate(self, text, period, entrance):
-        """ Extraí a data de entrada ou saída no período informado 
+        """ Extraí a data de entrada ou saída no período informado
         Formato:
         1º Período
         Saída- 11:58 """
