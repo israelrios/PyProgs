@@ -4,8 +4,10 @@
 # Created: 23-jan-2009
 
 import os
+import sys
 from monitors import Service, TrayIcon, curdir
 import gobject
+import monutil
 
 #################################################################
 # CheckMail
@@ -33,6 +35,7 @@ class CheckMailService(Service):
         self.haveNotify = False
         self.lastMsgs = set()
         self.newMailIcon = 'mail-unread.svg'
+        self.prowl = None # monutil.getProwl()
         try:
             self.notify = __import__('pynotify')
             if self.notify.init("Monitors"):
@@ -52,7 +55,8 @@ class CheckMailService(Service):
         n = self.notify.Notification(_("New Mail"), tip, iconname)
         n.set_urgency(self.notify.URGENCY_NORMAL)
         n.set_timeout(10000) # 10 segundos
-        n.attach_to_status_icon(self.getTrayIcon())
+        if hasattr(n, 'attach_to_status_icon'):
+            n.attach_to_status_icon(self.getTrayIcon())
         if "actions" in self.notifyCaps:
             loop = gobject.MainLoop ()
             n.connect('closed', lambda sender: loop.quit())
@@ -97,9 +101,22 @@ class CheckMailService(Service):
         self.setIcon(hasmail, self.processTip(msgs, tip))
         self.lastMsgs = msgs
 
+        if timered:
+            self.sendProwl(new)
+
         if self.haveNotify:
             if timered and len(new) > 0:
                 self.showNotify(self.joinMsgSubjects(new))
+
+    def sendProwl(self, msgs):
+        if self.prowl is None:
+            return
+
+        try:
+            for msg in msgs:
+                self.prowl.post("Mail (Serpro)", "", msg[1], "message://")
+        except:
+            print "Can't send to Prowl: " + sys.exc_info()[0]
 
     def onQuit(self):
         pass

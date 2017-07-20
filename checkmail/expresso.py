@@ -26,21 +26,21 @@ class ExpressoService(ImapCheckMailService):
         # time.time() retorna em segundos
         self.lastRefresh = time.time() - self.ieRefreshTime
         self.logged = False
-    
+
     def doLogin(self):
         self.sync.login(self.user, self.passwd)
         self.logged = True
-    
+
     def onQuit(self):
         try:
             ImapCheckMailService.onQuit(self)
         finally:
             self.close()
-        
+
     def close(self):
         self.sync.close()
         self.logged = False
-        
+
     def askDeleteMessages(self, todelete):
         """ Pergunta ao usuário se devemos continuar com a exclusão das mensagens.
             Só pergunta quando o número de mensagens excluídas fora da lixeira passar de 5. """
@@ -48,15 +48,15 @@ class ExpressoService(ImapCheckMailService):
         for folder in todelete:
             if folder != 'INBOX/Trash':
                 msgcount += len(todelete[folder])
-                
+
         if msgcount <= 5: # menos que 6 mensagens não pergunta ao usuário
             return True
-        
+
         msg = _(u"Delete %d messages from Expresso?") % msgcount
         if self.haveNotify:
             if not "actions" in self.notifyCaps:
                 return True # se não suportar actions então nem mostra a notificação
-            
+
             self.delMsgUserResponse = False
             n = self.notify.Notification(_("Delete Messages?"), msg, gtk.STOCK_DIALOG_QUESTION)
             n.set_urgency(self.notify.URGENCY_NORMAL)
@@ -64,26 +64,27 @@ class ExpressoService(ImapCheckMailService):
             n.add_action("default", _("Abort"), self.onMsgDelClick)
             n.add_action("abort", _("Abort"), self.onMsgDelClick)
             n.add_action("delete", _("Delete"), self.onMsgDelClick)
-            n.attach_to_status_icon(self.getTrayIcon())
-            loop = gobject.MainLoop ()
+            if hasattr(n, 'attach_to_status_icon'):
+                n.attach_to_status_icon(self.getTrayIcon())
+            loop = gobject.MainLoop()
             n.connect('closed', lambda sender: loop.quit())
             if n.show():
                 loop.run() #sem o loop não funciona a action da notificação
             return self.delMsgUserResponse
         else:
             return True # não pergunta, gtk.MessageDialog não funciona quando chamada de uma thread
-        
+
     def onMsgDelClick(self, n, action):
         self.delMsgUserResponse = action == 'delete'
         n.close()
-        
+
     def processTip(self, subjects, tip):
         tip = ImapCheckMailService.processTip(self, subjects, tip)
         return tip + '\n' + self.sync.getQuotaStr()
-    
+
     def createImapConnection(self):
         return IMAP4('localhost')
-        
+
     def runService(self, timered):
         if self == threading.currentThread():
             # deve-se definir o refreshMinutes aqui, para que em caso de erro não fique com o último valor
@@ -93,7 +94,7 @@ class ExpressoService(ImapCheckMailService):
 
             now = time.time()
             if not timered or now - self.lastRefresh >= self.ieRefreshTime:
-                if (self.refreshcount % 60) == 0: # a cada 60 iterações faz um full refresh
+                if (self.refreshcount % 20) == 0: # a cada 20 iterações faz um full refresh
                     self.sync.loadAllMsgs()
                     self.refreshcount += 1
                 else:
