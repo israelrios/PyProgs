@@ -20,14 +20,15 @@ import tempfile
 import sys
 import subprocess
 
-SEC_HOUR = 60*60 # 1 hora em segundos
+SEC_HOUR = 60 * 60  # 1 hora em segundos
 
-SEC_MAX_PERIOD = SEC_HOUR * 5 # 5hs
-SEC_ALERT_PERIOD = SEC_MAX_PERIOD - (60 * 2) #4hs e 58mins
+SEC_MAX_PERIOD = SEC_HOUR * 5  # 5hs
+SEC_ALERT_PERIOD = SEC_MAX_PERIOD - (60 * 2)  # 4hs e 58mins
 
 NOT_LOGGED = 3
 PONTO_OK = 1
 PONTO_NOK = 2
+
 
 class SisCopTrayIcon(TrayIcon):
     def onActivate(self, event):
@@ -36,7 +37,7 @@ class SisCopTrayIcon(TrayIcon):
     def prepareMenu(self, menu):
         TrayIcon.prepareMenu(self, menu)
         menu.append(self.createMenuItem(gtk.STOCK_CONNECT, self.onMenuConnect))
-        #menu.append(self.createMenuItem("Leave Alert", self.onMenuConnect))
+        # menu.append(self.createMenuItem("Leave Alert", self.onMenuConnect))
 
     def onMenuConnect(self, event):
         self.service.decodeCaptcha()
@@ -49,7 +50,7 @@ class SisCopTrayIcon(TrayIcon):
         elif status == PONTO_NOK:
             iconname = 'siscop_waiting.png'
             tip = u'Aguarde para registrar o ponto ' + \
-                self.service.timeReturn.strftime('(%H:%M)')
+                  self.service.timeReturn.strftime('(%H:%M)')
         else:
             self.set_from_stock('gtk-dialog-warning')
             tip = u'Faça o login.'
@@ -76,11 +77,11 @@ class SisCopService(Service):
         self.fields = {}
         self.fields['tx_cpf'] = user
         self.fields['tx_senha'] = passwd
-        #Inicialização
+        # Inicialização
         self.opener, self.cookiejar = self.buildOpener()
         self.tempOpener = None
         self.tempCookiejar = None
-        #Atualiza a cada 5min
+        # Atualiza a cada 5min
         self.refreshMinutes = 5
         self.lastPageId = None
         self.lastProwl = None
@@ -89,7 +90,7 @@ class SisCopService(Service):
         self.prowl = getProwl()
 
     def buildOpener(self):
-        cookiejar = cookielib.CookieJar() #cookies são necessários para a autenticação
+        cookiejar = cookielib.CookieJar()  # cookies são necessários para a autenticação
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookiejar))
         opener.addheaders = [('User-agent', 'Mozilla/5.0 (X11; Linux i686; rv:35.0) Gecko/20100101 Firefox/35.0')]
         return (opener, cookiejar)
@@ -133,19 +134,10 @@ class SisCopService(Service):
             # abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
             if 'chrome' in procs:
-                if self.logged:
-                    # passa os cookies para o browser para evitar a tela de login
-                    url = self.urlCadRegPonto + "?"
-                    cookies = []
-                    for cookie in self.cookiejar:
-                        cookies.append("%s=%s" % (cookie.name, cookie.value))
-                    url = url + urllib.urlencode({'cookie': '; '.join(cookies)})
-                else:
-                    url = self.urlLogin
-                execute(["google-chrome", url])
+                execute(["google-chrome", self.buildUrlRegPonto()])
                 execute(["wmctrl", "-a", "Chrome"])
             else:
-                execute(["firefox", self.urlLogin])
+                execute(["firefox", self.buildUrlRegPonto()])
                 execute(["wmctrl", "-a", "Firefox"])
         else:
             # o usuário não registrou o ponto no horário adequado, envia um alerta via push
@@ -153,15 +145,27 @@ class SisCopService(Service):
                 self.sendProwl("Registre o ponto")
                 self.lastProwl = pageId
 
-        #verifica se o usuário está na máquina
+        # verifica se o usuário está na máquina
         if pageId is not None:
             try:
                 bus = dbus.SessionBus()
                 ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
                 # costuma demorar alguns segundos pra retornar
-                ssaver.SimulateUserActivity() # faz aparecer a tela de login caso o screensaver esteja ativado
+                ssaver.SimulateUserActivity()  # faz aparecer a tela de login caso o screensaver esteja ativado
             except:
-                pass # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
+                pass  # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
+
+    def buildUrlRegPonto(self):
+        if self.logged:
+            # passa os cookies para o browser para evitar a tela de login
+            url = self.urlCadRegPonto + "?"
+            cookies = []
+            for cookie in self.cookiejar:
+                cookies.append("%s=%s" % (cookie.name, cookie.value))
+            url = url + urllib.urlencode({'cookie': '; '.join(cookies)})
+        else:
+            url = self.urlLogin
+        return url
 
     def decodeCaptcha(self):
         self.captchaValue = None
@@ -188,13 +192,14 @@ class SisCopService(Service):
             return None
         return decoded
 
-
     def checkLogged(self, url):
         self.logged = not url.geturl().startswith(self.urlLogin)
         return self.logged
 
     def saveCookies(self):
-        cookiesFileName = os.path.join( os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath( os.path.dirname(sys.argv[0]) ), '.siscop_cookies')
+        cookiesFileName = os.path.join(
+            os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0])),
+            '.siscop_cookies')
         with open(cookiesFileName, 'w') as f:
             for cookie in self.cookiejar:
                 f.write("%s=%s\n" % (cookie.name, cookie.value))
@@ -237,17 +242,17 @@ class SisCopService(Service):
         if not self.logged:
             raise NotLoggedException()
 
-        #Extraí as linhas de interese e remove as tags HTML
+        # Extraí as linhas de interese e remove as tags HTML
         start = end = -1
         parser = HtmlTextParser()
         for line in url.readlines():
             line = line.decode('cp1252')
             if start < 0:
-                #ascentos não estão funcionando, dá problema de codificação
-                start = line.find(u'Período Normal') # Período Normal
+                # ascentos não estão funcionando, dá problema de codificação
+                start = line.find(u'Período Normal')  # Período Normal
             if start >= 0:
                 if end < 0:
-                    end = line.find(u'Período Extra') # Período Extra
+                    end = line.find(u'Período Extra')  # Período Extra
                     parser.feed(line)
 
         parser.close()
@@ -260,9 +265,9 @@ class SisCopService(Service):
         if dtEntr is None or dtExit is not None:
             return True
         diff = datetime.datetime.today() - dtEntr
-        if diff.seconds < SEC_ALERT_PERIOD: # menor que 5 horas
-            secDiff = SEC_ALERT_PERIOD - diff.seconds + 5 # mais 5 segundos pra garantir que vai entrar no else
-            self.refreshMinutes = min(self.refreshMinutes, float(secDiff)/60.0)
+        if diff.seconds < SEC_ALERT_PERIOD:  # menor que 5 horas
+            secDiff = SEC_ALERT_PERIOD - diff.seconds + 5  # mais 5 segundos pra garantir que vai entrar no else
+            self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
         elif diff.seconds < SEC_MAX_PERIOD:
             self.showPage(dtEntr)
         else:
@@ -275,17 +280,17 @@ class SisCopService(Service):
             return True
         diff = datetime.datetime.today() - exit1
         self.timeReturn = exit1 + datetime.timedelta(seconds=SEC_HOUR)
-        if diff.seconds < SEC_HOUR: # menor que uma hora
-            secDiff = SEC_HOUR - diff.seconds + 1 # 1 segundo a mais
-            self.refreshMinutes = min(self.refreshMinutes, float(secDiff)/60.0)
-        else: # Maior que 1 hora
-            self.refreshMinutes = 2 # em 2 minutos verifica novamente
+        if diff.seconds < SEC_HOUR:  # menor que uma hora
+            secDiff = SEC_HOUR - diff.seconds + 1  # 1 segundo a mais
+            self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
+        else:  # Maior que 1 hora
+            self.refreshMinutes = 2  # em 2 minutos verifica novamente
             self.showPage(exit1)
         return False
 
     def check(self):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um período. """
-        #Atualiza a cada 40min
+        # Atualiza a cada 40min
         self.refreshMinutes = 40
         if not self.login():
             return NOT_LOGGED
@@ -333,7 +338,7 @@ class SisCopService(Service):
                     try:
                         parts = line.split('-')
                         if len(parts) < 2:
-                            #Sem horário
+                            # Sem horário
                             return None
                         else:
                             shour = parts[1].strip().split(':')
@@ -343,7 +348,7 @@ class SisCopService(Service):
                                                      minute=int(shour[1]))
                     except:
                         raise Exception(u'SisCop - The page layout is unknown')
-        #se chegar até aqui, é porque o layout é desconhecido
+        # se chegar até aqui, é porque o layout é desconhecido
         raise Exception(u'SisCop - The page layout is unknown')
 
 
@@ -352,6 +357,7 @@ class SisCopService(Service):
 
 if __name__ == '__main__':
     from monitors import MonApp, MonLoginWindow
+
     app = MonApp()
     app.appid = 'scc'
     app.name = 'SisCop Checker'
