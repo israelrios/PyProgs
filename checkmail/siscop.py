@@ -22,6 +22,8 @@ import subprocess
 
 SEC_HOUR = 60 * 60  # 1 hora em segundos
 
+SEC_INTERVAL = SEC_HOUR / 2 # intervalo de almoço (1/2 hora)
+
 SEC_MAX_PERIOD = SEC_HOUR * 5  # 5hs
 SEC_ALERT_PERIOD = SEC_MAX_PERIOD - (60 * 2)  # 4hs e 58mins
 
@@ -279,9 +281,9 @@ class SisCopService(Service):
         if exit1 is None or entr2 is not None:
             return True
         diff = datetime.datetime.today() - exit1
-        self.timeReturn = exit1 + datetime.timedelta(seconds=SEC_HOUR)
-        if diff.seconds < SEC_HOUR:  # menor que uma hora
-            secDiff = SEC_HOUR - diff.seconds + 1  # 1 segundo a mais
+        self.timeReturn = exit1 + datetime.timedelta(seconds=SEC_INTERVAL)
+        if diff.seconds < SEC_INTERVAL:  # menor que o intervalor mínimo (1/2 hora)
+            secDiff = SEC_INTERVAL - diff.seconds + 1  # 1 segundo a mais
             self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
         else:  # Maior que 1 hora
             self.refreshMinutes = 2  # em 2 minutos verifica novamente
