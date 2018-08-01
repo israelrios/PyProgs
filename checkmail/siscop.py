@@ -292,8 +292,8 @@ class SisCopService(Service):
 
     def check(self):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um período. """
-        # Atualiza a cada 40min
-        self.refreshMinutes = 40
+        # Atualiza a cada 29min
+        self.refreshMinutes = 29
         if not self.login():
             return NOT_LOGGED
         try:
