@@ -11,3 +11,4 @@ checkmail/smtpconf
 .pydevproject
 .settings
 *.deb
+.idea
