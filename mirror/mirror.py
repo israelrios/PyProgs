@@ -108,7 +108,8 @@ class Client(object):
             rheaders = dict()
 
             for key in rheaders_orig.keys():
-                if not key in ['Referer', 'Content-Length', 'Connection', 'Proxy-Connection', 'Keep-Alive', 'Host']:
+                if not key in ['Referer', 'Content-Length', 'Connection', 'Proxy-Connection', 'Keep-Alive', 'Host'] \
+                        and not '-Appengine-' in key:
                     rheaders[key] = rheaders_orig.get(key, "")
 
             logging.debug(str(rheaders))
@@ -231,11 +232,11 @@ class ProxyServerHandler(BaseHandler):
     def getContent(self, response):
         return response.content
 
-
     def writeHeaders(self, cres):
-        for key, value in cres.headers.iteritems():
+        for key in cres.headers.keys():
             if key not in IGNORE_HEADERS:
-                self.response.headers[key] = value
+                for value in cres.header_msg.getheaders(key):
+                    self.response.headers.add_header(key, value)
 
     def get(self, url):
         url = url.replace('-', '://', 1)
@@ -256,6 +257,7 @@ class ProxyServerHandler(BaseHandler):
         if content:
             logging.debug("Len: %dB", len(content))
             self.response.write(content)
+        logging.debug(str(self.response.headers))
         self.response.set_status(cres.status_code)
 
 
