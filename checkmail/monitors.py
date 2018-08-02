@@ -19,11 +19,12 @@ import gettext
 version = "3.5.1"
 
 if 'http_proxy' in os.environ:
-    del os.environ['http_proxy'] #não utiliza proxy para acessar as páginas
-    
-curdir = os.path.abspath( os.path.dirname(sys.argv[0]) )
+    del os.environ['http_proxy']  # não utiliza proxy para acessar as páginas
+
+curdir = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 gettext.install("monitors")
+
 
 class TrayIcon(gtk.StatusIcon):
     def __init__(self, service):
@@ -70,9 +71,9 @@ class TrayIcon(gtk.StatusIcon):
         self.set_visible(False)
 
 
-def showMessage(text, caption, parentWindow = None, mtype = gtk.MESSAGE_INFO):
+def showMessage(text, caption, parentWindow=None, mtype=gtk.MESSAGE_INFO):
     dlg = gtk.MessageDialog(parentWindow, gtk.DIALOG_MODAL, mtype, gtk.BUTTONS_OK, text)
-    #dlg.set_markup(text)
+    # dlg.set_markup(text)
     dlg.set_title(caption)
     dlg.run()
     dlg.destroy()
@@ -92,17 +93,17 @@ class Service(threading.Thread):
         self.user = user
         self.passwd = passwd
         self.goEvent = threading.Event()
-        self.setDaemon(True) # se a thread principal terminar esta thread será finalizada
+        self.setDaemon(True)  # se a thread principal terminar esta thread será finalizada
         self.name = self.__class__.__name__
-    
+
     def setInitialIcon(self):
         if not self.terminated and self.isAlive():
             gobject.idle_add(lambda: self.getTrayIcon().setInitialIcon())
-        
+
     def setIconError(self, error):
         if not self.terminated and self.isAlive():
             gobject.idle_add(lambda: self.getTrayIcon().setError(error))
-        
+
     def setIcon(self, *args):
         if not self.terminated and self.isAlive():
             gobject.idle_add(lambda: self.getTrayIcon().setIcon(*args))
@@ -113,22 +114,22 @@ class Service(threading.Thread):
                 self.setInitialIcon()
                 self._refresh(False)
             while not self.terminated:
-                self.goEvent.wait(self.refreshMinutes * 60) #em segundos
+                self.goEvent.wait(self.refreshMinutes * 60)  # em segundos
                 if self.terminated:
                     break
                 self._refresh(not self.goEvent.isSet())
                 self.goEvent.clear()
         finally:
             gobject.idle_add(self.destroyTrayIcon)
-            self.onQuit();
+            self.onQuit()
 
             self.app.serviceQuit(self)
-    
+
     def destroyTrayIcon(self):
         if self._trayicon is not None:
             self._trayicon.destroy()
             self._trayicon = None
-            
+
     def onQuit(self):
         pass
 
@@ -165,11 +166,17 @@ class Service(threading.Thread):
             self.start()
         self.goEvent.set()
 
+    def runService(self, timered):
+        pass
+
+    def createTrayIcon(self):
+        pass
+
 
 #####################################################
 # MonLoginWindow
 class MonLoginWindow(gtk.Window):
-    
+
     def __init__(self, app):
         self.app = app
         gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
@@ -179,14 +186,14 @@ class MonLoginWindow(gtk.Window):
 
         self.conf = self.readConfig()
 
-        #self.set_size_request(250, 150)
+        # self.set_size_request(250, 150)
         self.set_border_width(10)
         self.set_title("%s %s - Login" % (self.app.name, version))
         self.set_position(gtk.WIN_POS_CENTER)
         self.set_modal(True)
-        
+
         self.add(self.createControls())
-        
+
         self.okButton.grab_default()
 
         # Ajusta o controle inicial
@@ -194,10 +201,10 @@ class MonLoginWindow(gtk.Window):
             self.userEntry.grab_focus()
         else:
             self.passEntry.grab_focus()
-    
+
     def readConfig(self):
         return MonConfig(self.app)
-    
+
     def createUserPass(self):
         # Load the login entry box
         userLabel = gtk.Label(_("Username: "))
@@ -219,11 +226,11 @@ class MonLoginWindow(gtk.Window):
         self.passEntry.connect("activate", self.login)
         self.passEntry.set_visibility(False)
         self.passEntry.show()
-        
+
         self.cbSavePass = gtk.CheckButton(_("Sa_ve Password"))
         self.cbSavePass.show()
         self.cbSavePass.set_active(self.conf.password != '')
-        
+
         self.cbAutoStart = gtk.CheckButton(_("_Auto Start"))
         if self.app.desktopFile is None:
             self.cbAutoStart.hide()
@@ -233,20 +240,20 @@ class MonLoginWindow(gtk.Window):
 
         table = gtk.Table(4, 2)
         table.set_row_spacings(8)
-        
+
         table.attach(userLabel, 0, 1, 0, 1, gtk.FILL, 0)
-        table.attach(self.userEntry, 1, 2, 0, 1, gtk.EXPAND|gtk.FILL, 0)
+        table.attach(self.userEntry, 1, 2, 0, 1, gtk.EXPAND | gtk.FILL, 0)
 
         table.attach(passLabel, 0, 1, 1, 2, gtk.FILL, 0)
-        table.attach(self.passEntry, 1, 2, 1, 2, gtk.EXPAND|gtk.FILL, 0)
-        
-        table.attach(self.cbSavePass, 1, 2, 2, 3, gtk.EXPAND|gtk.FILL, 0)
-        table.attach(self.cbAutoStart, 1, 2, 3, 4, gtk.EXPAND|gtk.FILL, 0)
-        
+        table.attach(self.passEntry, 1, 2, 1, 2, gtk.EXPAND | gtk.FILL, 0)
+
+        table.attach(self.cbSavePass, 1, 2, 2, 3, gtk.EXPAND | gtk.FILL, 0)
+        table.attach(self.cbAutoStart, 1, 2, 3, 4, gtk.EXPAND | gtk.FILL, 0)
+
         table.show()
-        
+
         return table
-    
+
     def createButtons(self):
         self.okButton = gtk.Button(stock=gtk.STOCK_OK)
         self.okButton.connect("clicked", self.login)
@@ -262,12 +269,12 @@ class MonLoginWindow(gtk.Window):
         bbox.pack_start(cancelButton, True, True, 0)
         bbox.pack_end(self.okButton, True, True, 0)
         bbox.show()
-        
-        return bbox;
-    
+
+        return bbox
+
     def createCustom(self, mainbox):
         pass
-    
+
     def createControls(self):
         # Append login and pass entry box to vbox
         mainbox = gtk.VBox(False, 0)
@@ -277,7 +284,7 @@ class MonLoginWindow(gtk.Window):
         mainbox.pack_end(self.createButtons(), False, True, 0)
         mainbox.show()
         return mainbox
-             
+
     def show(self):
         # se alguma mensagem filha dessa janela for exibida o ícone precisa ser resetado
         self.set_icon_from_file(os.path.join(curdir, self.app.iconFile or 'mail-unread.png'))
@@ -288,7 +295,7 @@ class MonLoginWindow(gtk.Window):
             if self.login(None):
                 return
         self.show()
-    
+
     def doLogin(self, user, passwd):
         return self.app.login(user, passwd)
 
@@ -315,11 +322,13 @@ class MonLoginWindow(gtk.Window):
             showMessage(str(e), _("Error"), self)
         return False
 
+
 #####################################################
 # MonConfig
 class MonConfig:
     username = ''
     password = ''
+
     def __init__(self, app):
         self.app = app
         self.home = os.getenv('USERPROFILE') or os.getenv('HOME')
@@ -334,10 +343,10 @@ class MonConfig:
             except:
                 self.password = ''
         self.loadValues()
-    
+
     def loadValues(self):
         pass
-    
+
     def saveValues(self):
         pass
 
@@ -350,35 +359,35 @@ class MonConfig:
 
     def save(self):
         config = self.config
-        
+
         if not config.has_section('login'):
             config.add_section('login')
         config.set('login', 'username', self.username)
-        
+
         pw = self.password
         if pw != '':
             pw = zlib.compress(pw).encode('hex')
         config.set('login', 'pass', pw)
-        
+
         self.saveValues()
-        
+
         configfile = open(self.filename, 'w')
         try:
             config.write(configfile)
         finally:
             configfile.close()
-    
+
     def getAutoStartFileName(self):
         fname = self.app.desktopFile
         if fname is None or len(fname) == 0:
             return None
         autodir = os.path.join(os.getenv('XDG_CONFIG_HOME') or os.path.join(self.home, '.config'), 'autostart')
         return os.path.join(autodir, fname)
-        
+
     def isAutoStartEnabled(self):
         autofile = self.getAutoStartFileName()
         return autofile is not None and os.path.exists(autofile)
-    
+
     def setAutoStartEnabled(self, enabled):
         autofile = self.getAutoStartFileName()
         if autofile is None or enabled == self.isAutoStartEnabled():
@@ -410,11 +419,11 @@ class MonConfig:
 class ServiceRunner:
     service = None
     started = False
-    
+
     def __init__(self, app, serviceClass):
         self.app = app
         self.serviceClass = serviceClass
-        
+
     def check(self, active, user, passwd):
         if self.service is not None:
             self.service.quit()
@@ -424,30 +433,30 @@ class ServiceRunner:
             return self.service.test()
         else:
             return True
-    
+
     def serviceQuit(self, service):
         if self.started and self.service == service:
             self.started = False
             self.service = None
             self.app.serviceQuit(service)
-    
+
     def start(self):
-        if( self.service is not None):
+        if self.service is not None:
             self.started = True
-            self.service.start();
-    
+            self.service.start()
+
     def running(self):
-        return (self.service is not None)
-    
+        return self.service is not None
+
     def quit(self):
         if self.service is not None:
             print self.service
             self.service.quit()
 
     def join(self):
-        service = self.service # guarda a instância porque ela pode ser alterada no serviceQuit
+        service = self.service  # guarda a instância porque ela pode ser alterada no serviceQuit
         if service is not None and service.isAlive():
-            service.join(15) # aguarda no máximo 15 segundos
+            service.join(15)  # aguarda no máximo 15 segundos
 
 
 #####################################################################
@@ -455,29 +464,32 @@ class ServiceRunner:
 
 class MonApp:
 
-    def __init__(self, appid = 'monitors'):
+    def __init__(self, appid='monitors'):
         self.fdlock = None
         self.services = []
         self.appid = appid
         self.name = 'Monitors'
         self.iconFile = None
         self.configFile = "." + appid + ".cfg"
-        self.autoQuit = True # indica se a aplicação deve ser finalizada quando todas as threads de serviço forem finalizadas
+
+        # indica se a aplicação deve ser finalizada quando todas as threads de serviço forem finalizadas
+        self.autoQuit = True
+
         syslog.openlog(appid)
         gobject.threads_init()
-        #gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
+        # gtk.gdk.threads_init() #necessary if gtk.gdk.threads_enter() is called somewhere
         self.tryAutoLogin = len(sys.argv) > 1 and '-auto' in sys.argv[1:]
         self.desktopFile = None
-    
+
     def addService(self, serviceClass):
         self.services.append(ServiceRunner(self, serviceClass))
-    
+
     def clearServices(self):
         for s in self.services:
             s.quit()
         self.services = []
-    
-    #Retorna True se o login teve sucesso
+
+    # Retorna True se o login teve sucesso
     def login(self, user, passwd):
         self.removeLock()
         self.createLock(user)
@@ -485,7 +497,7 @@ class MonApp:
             if not service.check(True, user, passwd):
                 return False
         return True
-    
+
     def startServices(self):
         for t in self.services:
             t.start()
@@ -498,7 +510,7 @@ class MonApp:
         if self.autoQuit:
             gobject.idle_add(gtk.main_quit)
 
-    def quit(self, wait = True):
+    def quit(self, wait=True):
         running = False
         for t in self.services:
             if t.running():
@@ -509,18 +521,18 @@ class MonApp:
             try:
                 gtk.main_quit()
             except:
-                pass # gtk.main_quit pode dar uma exceção se estiver fora do mainloop
+                pass  # gtk.main_quit pode dar uma exceção se estiver fora do mainloop
 
         if running and wait:
             for t in self.services:
                 t.join()
-        
+
         self.removeLock()
 
-    def saveyourself(self, *args): #phase, save_style, is_shutdown, interact_style, is_fast):
+    def saveyourself(self, *args):  # phase, save_style, is_shutdown, interact_style, is_fast):
         """ Chamado pelo gnome antes de fechar a sessão.
             O correto seria só salvar os dados e não fechar o programa. """
-        self.autoQuit = False # neste momento só devemos salvar o estado e não fechar o app
+        self.autoQuit = False  # neste momento só devemos salvar o estado e não fechar o app
         self.quit(True)
         return True
 
@@ -536,7 +548,7 @@ class MonApp:
         else:
             print 'INT SIGNAL'
         self.quit(False)
-    
+
     def run(self):
         signal.signal(signal.SIGINT, self.handlesigterm)
         signal.signal(signal.SIGTERM, self.handlesigterm)
@@ -557,15 +569,15 @@ class MonApp:
         else:
             gnome.program_init(self.name, version)
             self.gclient = gnome.ui.master_client()
-            #self.gclient = gnome.ui.Client()
-            #self.gclient.connect_to_session_manager()
+            # self.gclient = gnome.ui.Client()
+            # self.gclient.connect_to_session_manager()
             self.gclient.connect("save-yourself", self.saveyourself)
             self.gclient.connect("die", self.die)
-      
+
     def lockError(self):
         raise Exception(_(u"There is another instance running for this user."))
-            
-    #Creates the lock file
+
+    # Creates the lock file
     def createLock(self, user):
         lockfile = os.path.join(tempfile.gettempdir(), self.appid + "." + user + ".lock")
         self.fdlock = os.open(lockfile, os.O_CREAT | os.O_RDWR)
@@ -577,11 +589,11 @@ class MonApp:
             os.close(self.fdlock)
             self.fdlock = None
             self.lockError()
-    
+
     def removeLock(self):
         if self.fdlock is None or self.fdlock == -1:
             return
-        
+
         fcntl.lockf(self.fdlock, fcntl.LOCK_UN)
-        os.close(self.fdlock);
+        os.close(self.fdlock)
         self.fdlock = None
