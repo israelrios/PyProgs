@@ -16,7 +16,6 @@ import sys
 import simplejson
 
 # Atualiza a cada 29min
-AUTHORIZATION = 'Authorization'
 DEFAULT_REFRESH_INTERVAL = 29.0
 
 SEC_HOUR = 60 * 60  # 1 hora em segundos
@@ -28,6 +27,8 @@ SEC_MAX_PERIOD = SEC_HOUR * 5  # 5hs
 NOT_LOGGED = 3
 PONTO_OK = 1
 PONTO_NOK = 2
+
+AUTHORIZATION_HEADER = 'Authorization'
 
 
 class SisCopTrayIcon(TrayIcon):
@@ -108,9 +109,9 @@ class SisCopService(Service):
     def setToken(self, token):
         self.token = token
         if self.token:
-            self.session.headers[AUTHORIZATION] = 'Token ' + self.token
+            self.session.headers[AUTHORIZATION_HEADER] = 'Token ' + self.token
         else:
-            self.session.headers.pop(AUTHORIZATION, None)
+            self.session.headers.pop(AUTHORIZATION_HEADER, None)
 
     def createTrayIcon(self):
         return SisCopTrayIcon(self)
