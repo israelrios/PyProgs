@@ -16,6 +16,7 @@ import sys
 import simplejson
 
 # Atualiza a cada 29min
+AUTHORIZATION = 'Authorization'
 DEFAULT_REFRESH_INTERVAL = 29.0
 
 SEC_HOUR = 60 * 60  # 1 hora em segundos
@@ -57,7 +58,19 @@ class SisCopTrayIcon(TrayIcon):
 
 class NotLoggedException(Exception):
     def __init__(self):
-        Exception.__init__(self, u"Login required.")
+        super(NotLoggedException, self).__init__(self, u"Login required.")
+
+
+def retryLogin(func):
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        try:
+            return func(*args, **kwargs)
+        except NotLoggedException:
+            obj.login()
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 class SisCopService(Service):
@@ -69,28 +82,35 @@ class SisCopService(Service):
 
     def __init__(self, app, user, passwd):
         Service.__init__(self, app, user, passwd)
-        # Os campos do formulário
+        # Os campos do formulário de login
         self.fields = {'username': user, 'password': passwd}
         # Inicialização
         self.token = None
-        self.cookiejar = requests.cookies.RequestsCookieJar()
         self.refreshMinutes = DEFAULT_REFRESH_INTERVAL
         self.lastPageId = None
         self.lastProwl = None
         self.logged = False
         self.timeReturn = None
+
+        self.session = requests.Session()
+
         self.prowl = getProwl()
 
-    def getHeaders(self):
-        headers = {
+        self.configHeaders()
+
+    def configHeaders(self):
+        self.session.headers.update({
             'User-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
                           ' (KHTML, like Gecko) Chrome/68.0.3440.75 Safari/537.36',
-            'X-Requested-With': 'XMLHttpRequest',
             'Origin': self.urlSisCop,
-            'Accept': '*/*'}
+            'Accept': '*/*'})
+
+    def setToken(self, token):
+        self.token = token
         if self.token:
-            headers['Authorization'] = 'Token ' + self.token
-        return headers
+            self.session.headers[AUTHORIZATION] = 'Token ' + self.token
+        else:
+            self.session.headers.pop(AUTHORIZATION, None)
 
     def createTrayIcon(self):
         return SisCopTrayIcon(self)
@@ -105,8 +125,11 @@ class SisCopService(Service):
             if hour >= 20 or hour <= 6:
                 return
         # o valor de refreshMinutes pode ser alterado em self.check()
-        status = self.check()
-        self.setIcon(status)
+        try:
+            status = self.check()
+            self.setIcon(status)
+        except NotLoggedException:
+            self.setIcon(NOT_LOGGED)
 
     def sendProwl(self, msg):
         if self.prowl is None:
@@ -125,10 +148,6 @@ class SisCopService(Service):
         if pageId is None or pageId != self.lastPageId:
             if pageId is not None:
                 self.lastPageId = pageId
-            # verifica se a sessão ainda é válida, senão faz login.
-            self.checkLogged(self.requestRegistro())
-            if not self.logged:
-                self.login()
             # abre o browser com a página
             procs = commands.getoutput('/bin/ps xo comm').split('\n')
             if 'chrome' in procs:
@@ -159,45 +178,56 @@ class SisCopService(Service):
         # passa os cookies para o browser para evitar a tela de login
         # url = self.urlCadRegPonto + "?"
         # cookies = []
-        # for cookie in self.cookiejar:
+        # for cookie in self.session.cookies:
         #     cookies.append("%s=%s" % (cookie.name, cookie.value))
         # url = url + urllib.urlencode({'cookie': '; '.join(cookies), 'token': self.token})
 
-    def checkLogged(self, resp):
+    def isAuthValid(self, resp):
         self.logged = self.token and resp.status_code != 401 and not resp.url.startswith(self.urlLoginPage)
         return self.logged
 
-    def saveToken(self):
+    def assertLogged(self, resp):
+        if not self.isAuthValid(resp):
+            raise NotLoggedException()
+        return resp
+
+    def saveSession(self):
         tokenFileName = os.path.join(
             os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0])),
             '.siscop_token')
         with open(tokenFileName, 'w') as f:
             f.write("%s\n" % self.token)
 
+        cookieFileName = os.path.join(
+            os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0])),
+            '.siscop_cookies')
+        with open(cookieFileName, 'w') as f:
+            for cookie in self.session.cookies:
+                f.write("%s=%s\n" % (cookie.name, cookie.value))
+
     def login(self):
         if self.logged:
             return True
-        url = self.requestLogin()
-        if self.checkLogged(url):
-            self.saveToken()
-        return self.logged
+        self.requestLogin()
+        self.saveSession()
 
     def requestLogin(self):
-        requests.get(self.urlLoginPage, cookies=self.cookiejar)
-        self.token = None
-        resp = requests.post(self.urlAuth, json=self.fields,
-                             headers=self.getHeaders(), cookies=self.cookiejar)
-        self.token = resp.headers.get('Set-Token', None)
-        return resp
+        self.session.get(self.urlLoginPage)
+        self.setToken(None)
+        resp = self.session.post(self.urlAuth, json=self.fields)
+        self.setToken(resp.headers.get('Set-Token', None))
+        return self.assertLogged(resp)
 
     def requestRegistro(self):
         try:
-            return requests.get(self.urlRegistro, headers=self.getHeaders(), cookies=self.cookiejar)
+            resp = self.session.get(self.urlRegistro)
         except Exception, e:
             raise Exception(u"It was not possible to connect at SisCop. Error:\n\n" + str(e))
+        return self.assertLogged(resp)
 
-    def getRegistro(self):
-        """ Obtêm o último registro de ponto. Formato:
+    @retryLogin
+    def getRegistros(self):
+        """ Obtêm os registros de ponto do dia. Formato:
         {
             "tipo" : "E",
             "hora" : "2018-08-01 09:48:00",
@@ -209,24 +239,23 @@ class SisCopService(Service):
         }
         """
         resp = self.requestRegistro()
-
-        if not self.checkLogged(resp):
-            raise NotLoggedException()
-
         registros = simplejson.loads(resp.text)
+
         if len(registros) == 0:
             return None
 
-        # todos os registros do dia são obtidos, pegamos só o último
-        registro = registros[-1]
-        registro['hora'] = SisCopService.toDate(registro['hora'])
-        return registro
+        for reg in registros:
+            reg['hora'] = SisCopService.toDate(reg['hora'])
+
+        return registros
 
     def checkPeriod(self, registro):
         """ Verifica se já se passou mais de 5 horas da entrada do período. """
         if registro is None or registro['tipo'] != 'E':
             return True
+
         diff = datetime.datetime.today() - registro['hora']
+
         if diff.seconds < SEC_MAX_PERIOD:  # menor que 5 horas
             secDiff = SEC_MAX_PERIOD - diff.seconds + 1  # mais 1 segundo pra garantir que vai entrar no else
             self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
@@ -238,8 +267,11 @@ class SisCopService(Service):
         """ Verifica se o retorno do almoço foi registrado. """
         if registro is None or registro['tipo'] == 'E' or registro['hora'].hour >= 15:
             return True
+
         diff = datetime.datetime.today() - registro['hora']
+
         self.timeReturn = registro['hora'] + datetime.timedelta(seconds=SEC_INTERVAL)
+
         if diff.seconds < SEC_INTERVAL:  # menor que o intervalor mínimo (1/2 hora)
             secDiff = SEC_INTERVAL - diff.seconds + 1  # 1 segundo a mais
             self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
@@ -252,17 +284,12 @@ class SisCopService(Service):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um
         período. """
         self.refreshMinutes = DEFAULT_REFRESH_INTERVAL
-        if not self.login():
-            return NOT_LOGGED
-        try:
-            registro = self.getRegistro()
-        except NotLoggedException:
-            if not self.login():
-                return NOT_LOGGED
-            try:
-                registro = self.getRegistro()
-            except NotLoggedException:
-                return NOT_LOGGED
+
+        self.login()
+        registros = self.getRegistros()
+
+        # todos os registros do dia são obtidos, pegamos só o último
+        registro = registros[-1]
 
         self.timeReturn = None
 
