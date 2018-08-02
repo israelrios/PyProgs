@@ -15,6 +15,9 @@ import threading
 import sys
 import simplejson
 
+# Atualiza a cada 29min
+DEFAULT_REFRESH_INTERVAL = 29.0
+
 SEC_HOUR = 60 * 60  # 1 hora em segundos
 
 SEC_INTERVAL = SEC_HOUR / 2  # intervalo de almoço (1/2 hora)
@@ -71,8 +74,7 @@ class SisCopService(Service):
         # Inicialização
         self.token = None
         self.cookiejar = requests.cookies.RequestsCookieJar()
-        # Atualiza a cada 29min
-        self.refreshMinutes = 29
+        self.refreshMinutes = DEFAULT_REFRESH_INTERVAL
         self.lastPageId = None
         self.lastProwl = None
         self.logged = False
@@ -113,7 +115,7 @@ class SisCopService(Service):
         # noinspection PyBroadException
         try:
             self.prowl.post("Siscop", "", msg)
-        except:
+        except Exception:
             print "Can't send to Prowl: " + sys.exc_info()[0]
 
     def showPage(self, pageId=None):
@@ -149,7 +151,7 @@ class SisCopService(Service):
                 ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
                 # costuma demorar alguns segundos pra retornar
                 ssaver.SimulateUserActivity()  # faz aparecer a tela de login caso o screensaver esteja ativado
-            except:
+            except Exception:
                 pass  # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
 
     def buildUrlRegPonto(self):
@@ -242,15 +244,14 @@ class SisCopService(Service):
             secDiff = SEC_INTERVAL - diff.seconds + 1  # 1 segundo a mais
             self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
         else:  # Maior que o intervalo mínimo
-            self.refreshMinutes = 2  # em 2 minutos verifica novamente
+            self.refreshMinutes = 2.0  # em 2 minutos verifica novamente
             self.showPage(registro['hora'])
         return False
 
     def check(self):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um
         período. """
-        # Atualiza a cada 29min
-        self.refreshMinutes = 29
+        self.refreshMinutes = DEFAULT_REFRESH_INTERVAL
         if not self.login():
             return NOT_LOGGED
         try:
@@ -275,10 +276,7 @@ class SisCopService(Service):
     @staticmethod
     def toDate(text):
         """ Converte para data. Formatado da entrada: 2018-08-01 09:48:00"""
-        try:
-            return datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
-        except:
-            raise Exception(u'SisCop - The page layout is unknown')
+        return datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
 
 
 ########################################

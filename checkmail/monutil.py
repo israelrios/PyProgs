@@ -16,7 +16,8 @@ import mimetools
 from htmlentitydefs import name2codepoint as n2cp
 import sys
 
-#Classe para extrair o texto do HTML
+
+# Classe para extrair o texto do HTML
 class HtmlTextParser(HTMLParser):
 
     def __init__(self):
@@ -44,7 +45,10 @@ def getProwl():
         return None
     return Prowl(key)
 
+
 patHeader = re.compile('\r\n[\t ]')
+
+
 def decode_header(header):
     text = []
     lastAscii = None
@@ -67,14 +71,17 @@ def execute(cmd):
     if pid == 0:
         # To become the session leader of this new session and the process group
         # leader of the new process group, we call os.setsid().
+        # noinspection PyBroadException
         try:
             os.setsid()
             subprocess.Popen(cmd, close_fds=True)
-        except:
-            pass #ignore exceptions
+        except Exception:
+            pass  # ignore exceptions
+        # noinspection PyProtectedMember
         os._exit(os.EX_OK)
     else:
         os.waitpid(pid, 0)
+
 
 ###################################
 # Response parser functions
@@ -90,19 +97,25 @@ def substitute_entity(match):
         else:
             return match.group()
 
+
 def decode_htmlentities(string):
     entity_re = re.compile("&(#?)(\d{1,5}|\w{1,8});")
     return entity_re.subn(substitute_entity, string)[0]
+
 
 # Controls how sequences are encoded. If true, elements may be given multiple values by
 #  assigning a sequence.
 doseq = 1
 
+
 ##########################################################
 # Peguei na NET esta classe para codificar os campos
 # do formulário no formato multipart/form-data
 class MultipartPostHandler(urllib2.BaseHandler):
-    handler_order = urllib2.HTTPHandler.handler_order - 10 # needs to run first
+    handler_order = urllib2.HTTPHandler.handler_order - 10  # needs to run first
+
+    def __init__(self):
+        pass
 
     def http_request(self, request):
         data = request.get_data()
@@ -110,7 +123,7 @@ class MultipartPostHandler(urllib2.BaseHandler):
             v_files = []
             v_vars = []
             try:
-                for(key, value) in data.items():
+                for (key, value) in data.items():
                     if hasattr(value, 'read'):
                         v_files.append((key, value))
                     else:
@@ -123,23 +136,25 @@ class MultipartPostHandler(urllib2.BaseHandler):
             else:
                 boundary, data = self.multipart_encode(v_vars, v_files)
                 contenttype = 'multipart/form-data; boundary=%s' % boundary
-                if request.has_header('Content-Type') and request.get_header('Content-Type').find('multipart/form-data') != 0:
+                if request.has_header('Content-Type') and request.get_header('Content-Type').find(
+                        'multipart/form-data') != 0:
                     print ("Replacing %s with %s" % (request.get_header('content-type'), 'multipart/form-data'))
                 request.add_unredirected_header('Content-Type', contenttype)
 
             request.add_data(data)
         return request
 
-    def multipart_encode(self, params, files, boundary = None, body = None):
+    @staticmethod
+    def multipart_encode(params, files, boundary=None, body=None):
         if boundary is None:
             boundary = mimetools.choose_boundary()
         if body is None:
             body = ''
-        for(key, value) in params:
+        for (key, value) in params:
             body += '--%s\r\n' % boundary
             body += 'Content-Disposition: form-data; name="%s"' % key
             body += '\r\n\r\n' + str(value) + '\r\n'
-        for(key, fd) in files:
+        for (key, fd) in files:
             fd.seek(0, os.SEEK_END)
             file_size = fd.tell()
             if hasattr(fd, 'name'):
@@ -157,6 +172,8 @@ class MultipartPostHandler(urllib2.BaseHandler):
         return boundary, body
 
     https_request = http_request
+
+
 # end
 
 ##################################################################
@@ -165,7 +182,7 @@ API_DOMAIN = 'prowl.weks.net'
 
 
 class Prowl(object):
-    def __init__(self, apikey, providerkey=None):
+    def __init__(self, apikey):
         """
         Initialize a Prowl instance.
         """
