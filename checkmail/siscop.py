@@ -184,7 +184,10 @@ class SisCopService(Service):
         # url = url + urllib.urlencode({'cookie': '; '.join(cookies), 'token': self.token})
 
     def isAuthValid(self, resp):
-        self.logged = self.token and resp.status_code != 401 and not resp.url.startswith(self.urlLoginPage)
+        self.logged = self.token \
+                      and resp.status_code != 401 \
+                      and resp.text != u'token inválido' \
+                      and not resp.url.startswith(self.urlLoginPage)
         return self.logged
 
     def assertLogged(self, resp):
