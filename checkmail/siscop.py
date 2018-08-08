@@ -3,26 +3,28 @@
 # Autor: Israel Rios
 # Created: 15-abr-2009
 
-from monitors import Service, TrayIcon, curdir
-from monutil import execute, getProwl
-
-import os
-import requests
+import commands
 import datetime
 import dbus
-import commands
-import threading
-import sys
+import os
+import requests
 import simplejson
+import sys
+import threading
 
-# Atualiza a cada 29min
-DEFAULT_REFRESH_INTERVAL = 29.0
+from monitors import Service, TrayIcon, curdir
+from monutil import execute, getProwl
 
 SEC_HOUR = 60 * 60  # 1 hora em segundos
 
 SEC_INTERVAL = SEC_HOUR / 2  # intervalo de almoço (1/2 hora)
 
 SEC_MAX_PERIOD = SEC_HOUR * 5  # 5hs
+
+SEC_NORMAL_DAY = SEC_HOUR * 8  # 8hs
+
+# Atualiza a cada 29min
+DEFAULT_REFRESH_INTERVAL = SEC_INTERVAL / 60.0 - 1.0
 
 NOT_LOGGED = 3
 PONTO_OK = 1
@@ -45,8 +47,11 @@ class SisCopTrayIcon(TrayIcon):
             tip = u'Ponto OK'
         elif status == PONTO_NOK:
             iconname = 'siscop_waiting.png'
-            tip = u'Aguarde para registrar o ponto ' + \
-                  self.service.timeReturn.strftime('(%H:%M)')
+            timeReturn = self.service.timeReturn
+            if timeReturn is not None and timeReturn < datetime.datetime.today():
+                tip = u'Aguarde para registrar o ponto ' + timeReturn.strftime('(%H:%M)')
+            else:
+                tip = u'Registre o ponto'
         else:
             self.set_from_stock('gtk-dialog-warning')
             tip = u'Faça o login.'
@@ -143,9 +148,11 @@ class SisCopService(Service):
             print "Can't send to Prowl: " + sys.exc_info()[0]
 
     def showPage(self, pageId=None):
+        """ Mostra a página do SisCop se o pageId for diferente do último. """
+
         if pageId is not None and self != threading.currentThread():
             return
-        """ Mostra a página do SisCop se o pageId for diferente do último. """
+
         if pageId is None or pageId != self.lastPageId:
             if pageId is not None:
                 self.lastPageId = pageId
@@ -186,7 +193,6 @@ class SisCopService(Service):
     def isAuthValid(self, resp):
         self.logged = self.token \
                       and resp.status_code != 401 \
-                      and resp.text != u'token inválido' \
                       and not resp.url.startswith(self.urlLoginPage)
         return self.logged
 
@@ -196,15 +202,13 @@ class SisCopService(Service):
         return resp
 
     def saveSession(self):
-        tokenFileName = os.path.join(
-            os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0])),
-            '.siscop_token')
+        userHome = os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0]))
+
+        tokenFileName = os.path.join(userHome, '.siscop_token')
         with open(tokenFileName, 'w') as f:
             f.write("%s\n" % self.token)
 
-        cookieFileName = os.path.join(
-            os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0])),
-            '.siscop_cookies')
+        cookieFileName = os.path.join(userHome, '.siscop_cookies')
         with open(cookieFileName, 'w') as f:
             for cookie in self.session.cookies:
                 f.write("%s=%s\n" % (cookie.name, cookie.value))
@@ -243,6 +247,10 @@ class SisCopService(Service):
         }
         """
         resp = self.requestRegistro()
+
+        if resp.status_code == 204 or not resp.text:
+            return None
+
         registros = simplejson.loads(resp.text)
 
         if len(registros) == 0:
@@ -255,34 +263,65 @@ class SisCopService(Service):
 
     def checkPeriod(self, registro):
         """ Verifica se já se passou mais de 5 horas da entrada do período. """
-        if registro is None or registro['tipo'] != 'E':
+        if registro['tipo'] != 'E':
             return True
 
-        diff = datetime.datetime.today() - registro['hora']
+        dtreg = registro['hora']
 
-        if diff.seconds < SEC_MAX_PERIOD:  # menor que 5 horas
-            secDiff = SEC_MAX_PERIOD - diff.seconds + 1  # mais 1 segundo pra garantir que vai entrar no else
-            self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
-        else:  # maior que 5 horas
-            self.showPage(registro['hora'])
-        return False
+        diff = datetime.datetime.today() - dtreg
+
+        return not self.setNextRefreshOrShowPage(SEC_MAX_PERIOD, diff, dtreg, 0.5)
 
     def checkReturn(self, registro):
         """ Verifica se o retorno do almoço foi registrado. """
-        if registro is None or registro['tipo'] == 'E' or registro['hora'].hour >= 15:
+        dtreg = registro['hora']
+
+        if registro['tipo'] == 'E' or dtreg.hour < 11 or dtreg.hour >= 15:
             return True
 
-        diff = datetime.datetime.today() - registro['hora']
+        diff = datetime.datetime.today() - dtreg
 
-        self.timeReturn = registro['hora'] + datetime.timedelta(seconds=SEC_INTERVAL)
+        self.timeReturn = dtreg + datetime.timedelta(seconds=SEC_INTERVAL)
 
-        if diff.seconds < SEC_INTERVAL:  # menor que o intervalor mínimo (1/2 hora)
-            secDiff = SEC_INTERVAL - diff.seconds + 1  # 1 segundo a mais
-            self.refreshMinutes = min(self.refreshMinutes, float(secDiff) / 60.0)
-        else:  # Maior que o intervalo mínimo
-            self.refreshMinutes = 2.0  # em 2 minutos verifica novamente
-            self.showPage(registro['hora'])
+        self.setNextRefreshOrShowPage(SEC_INTERVAL, diff, dtreg, 2)
         return False
+
+    def checkDay(self, registros):
+        """ Verifica se a jornada de trabalho deve ser concluída. """
+        total = datetime.timedelta(0)
+        dtstart = None
+        for reg in registros:
+            dtreg = reg['hora']
+            if reg['tipo'] == 'E':
+                dtstart = dtreg
+            elif dtstart is not None:
+                total += dtreg - dtstart
+                dtstart = None
+
+        if dtstart is None or total.seconds == 0:
+            # o último registro é de saída ou não há registros
+            return True
+
+        total += datetime.datetime.today() - dtstart
+
+        return not self.setNextRefreshOrShowPage(SEC_NORMAL_DAY, total, dtstart, 1)
+
+    def setNextRefreshOrShowPage(self, maxSeconds, tdelta, pageId, showPageRefresh):
+        """ Define o próximo refresh com base no tdelda (diferença de tempo).
+          Se tdelda for maior que maxSeconds dispara a ação para mostrar a página do siscop
+          e define o próximo refresh para showPageRefresh.
+          Retorna True quando a página foi exibida."""
+        if tdelta.seconds < maxSeconds:
+            secDiff = maxSeconds - tdelta.seconds + 1  # 1 segundo a mais
+            self.setMinRefresh(float(secDiff) / 60.0)
+            return False
+
+        self.showPage(pageId)
+        self.setMinRefresh(showPageRefresh)
+        return True
+
+    def setMinRefresh(self, newRefresh):
+        self.refreshMinutes = min(self.refreshMinutes, newRefresh)
 
     def check(self):
         """ Verifica se já está na hora de bater o ponto, observando os horários de saída e o limite máximo de um
@@ -292,16 +331,17 @@ class SisCopService(Service):
         self.login()
         registros = self.getRegistros()
 
+        self.timeReturn = None
+
+        if registros is None:
+            return PONTO_OK
+
         # todos os registros do dia são obtidos, pegamos só o último
         registro = registros[-1]
 
-        self.timeReturn = None
-
-        if self.checkPeriod(registro):
-            self.checkReturn(registro)
-
-        if self.timeReturn is None:
+        if self.checkPeriod(registro) and self.checkReturn(registro) and self.checkDay(registros):
             return PONTO_OK
+
         return PONTO_NOK
 
     @staticmethod
