@@ -48,7 +48,7 @@ class SisCopTrayIcon(TrayIcon):
         elif status == PONTO_NOK:
             iconname = 'siscop_waiting.png'
             timeReturn = self.service.timeReturn
-            if timeReturn is not None and timeReturn < datetime.datetime.today():
+            if timeReturn is not None and timeReturn > datetime.datetime.today():
                 tip = u'Aguarde para registrar o ponto ' + timeReturn.strftime('(%H:%M)')
             else:
                 tip = u'Registre o ponto'
