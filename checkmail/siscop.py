@@ -19,9 +19,9 @@ SEC_HOUR = 60 * 60  # 1 hora em segundos
 
 SEC_INTERVAL = SEC_HOUR / 2  # intervalo de almoço (1/2 hora)
 
-SEC_MAX_PERIOD = SEC_HOUR * 5  # 5hs
+SEC_MAX_PERIOD = SEC_HOUR * 6
 
-SEC_NORMAL_DAY = SEC_HOUR * 8  # 8hs
+SEC_NORMAL_DAY = SEC_HOUR * 8
 
 # Atualiza a cada 29min
 DEFAULT_REFRESH_INTERVAL = SEC_INTERVAL / 60.0 - 1.0
