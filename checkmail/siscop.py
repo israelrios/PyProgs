@@ -3,7 +3,6 @@
 # Autor: Israel Rios
 # Created: 15-abr-2009
 
-import commands
 import datetime
 import dbus
 import os
@@ -157,13 +156,13 @@ class SisCopService(Service):
             if pageId is not None:
                 self.lastPageId = pageId
             # abre o browser com a página
-            procs = commands.getoutput('/bin/ps xo comm').split('\n')
-            if 'chrome' in procs:
-                execute(["google-chrome", self.buildUrlRegPonto()])
-                execute(["wmctrl", "-a", "Chrome"])
-            else:
-                execute(["firefox", self.buildUrlRegPonto()])
-                execute(["wmctrl", "-a", "Firefox"])
+            # procs = commands.getoutput('/bin/ps xo comm').split('\n')
+            # if 'chrome' in procs:
+            execute(["google-chrome", self.buildUrlRegPonto()])
+            execute(["wmctrl", "-a", "Chrome"])
+            #else:
+            #    execute(["firefox", self.buildUrlRegPonto()])
+            #    execute(["wmctrl", "-a", "Firefox"])
         else:
             # o usuário não registrou o ponto no horário adequado, envia um alerta via push
             if self.lastProwl != pageId:
@@ -346,8 +345,10 @@ class SisCopService(Service):
 
     @staticmethod
     def toDate(text):
-        """ Converte para data. Formatado da entrada: 2018-08-01 09:48:00"""
-        return datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        """ Converte para data. Formatado da entrada: 2018-08-01T09:48:00"""
+        FMT = "%Y-%m-%dT%H:%M:%S"
+        text = text[:len(datetime.datetime.now().strftime(FMT))]
+        return datetime.datetime.strptime(text, FMT)
 
 
 ########################################
