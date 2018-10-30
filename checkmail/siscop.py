@@ -11,6 +11,8 @@ import simplejson
 import sys
 import threading
 
+from dateutil import parser as dtparser
+
 from monitors import Service, TrayIcon, curdir
 from monutil import execute, getProwl
 
@@ -47,7 +49,7 @@ class SisCopTrayIcon(TrayIcon):
         elif status == PONTO_NOK:
             iconname = 'siscop_waiting.png'
             timeReturn = self.service.timeReturn
-            if timeReturn is not None and timeReturn > datetime.datetime.today():
+            if timeReturn is not None and timeReturn > datetime.datetime.now(timeReturn.tzinfo):
                 tip = u'Aguarde para registrar o ponto ' + timeReturn.strftime('(%H:%M)')
             else:
                 tip = u'Registre o ponto'
@@ -144,7 +146,7 @@ class SisCopService(Service):
         try:
             self.prowl.post("Siscop", "", msg)
         except Exception:
-            print "Can't send to Prowl: " + sys.exc_info()[0]
+            print("Can't send to Prowl: " + sys.exc_info()[0])
 
     def showPage(self, pageId=None):
         """ Mostra a página do SisCop se o pageId for diferente do último. """
@@ -160,7 +162,7 @@ class SisCopService(Service):
             # if 'chrome' in procs:
             execute(["google-chrome", self.buildUrlRegPonto()])
             execute(["wmctrl", "-a", "Chrome"])
-            #else:
+            # else:
             #    execute(["firefox", self.buildUrlRegPonto()])
             #    execute(["wmctrl", "-a", "Firefox"])
         else:
@@ -176,7 +178,8 @@ class SisCopService(Service):
                 bus = dbus.SessionBus()
                 ssaver = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
                 # costuma demorar alguns segundos pra retornar
-                ssaver.SimulateUserActivity()  # faz aparecer a tela de login caso o screensaver esteja ativado
+                # faz aparecer a tela de login caso o screensaver esteja ativado
+                ssaver.SimulateUserActivity()
             except Exception:
                 pass  # costuma lançar um erro DBusException: org.freedesktop.DBus.Error.NoReply
 
@@ -201,7 +204,8 @@ class SisCopService(Service):
         return resp
 
     def saveSession(self):
-        userHome = os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(os.path.dirname(sys.argv[0]))
+        userHome = os.getenv('USERPROFILE') or os.getenv('HOME') or os.path.abspath(
+            os.path.dirname(sys.argv[0]))
 
         tokenFileName = os.path.join(userHome, '.siscop_token')
         with open(tokenFileName, 'w') as f:
@@ -267,7 +271,7 @@ class SisCopService(Service):
 
         dtreg = registro['hora']
 
-        diff = datetime.datetime.today() - dtreg
+        diff = datetime.datetime.now(dtreg.tzinfo) - dtreg
 
         return not self.setNextRefreshOrShowPage(SEC_MAX_PERIOD, diff, dtreg, 0.5)
 
@@ -278,7 +282,7 @@ class SisCopService(Service):
         if registro['tipo'] == 'E' or dtreg.hour < 11 or dtreg.hour >= 15:
             return True
 
-        diff = datetime.datetime.today() - dtreg
+        diff = datetime.datetime.now(dtreg.tzinfo) - dtreg
 
         self.timeReturn = dtreg + datetime.timedelta(seconds=SEC_INTERVAL)
 
@@ -301,7 +305,7 @@ class SisCopService(Service):
             # o último registro é de saída ou não há registros
             return True
 
-        total += datetime.datetime.today() - dtstart
+        total += datetime.datetime.now(dtstart.tzinfo) - dtstart
 
         return not self.setNextRefreshOrShowPage(SEC_NORMAL_DAY, total, dtstart, 1)
 
@@ -345,10 +349,8 @@ class SisCopService(Service):
 
     @staticmethod
     def toDate(text):
-        """ Converte para data. Formatado da entrada: 2018-08-01T09:48:00"""
-        FMT = "%Y-%m-%dT%H:%M:%S"
-        text = text[:len(datetime.datetime.now().strftime(FMT))]
-        return datetime.datetime.strptime(text, FMT)
+        """ Converte para data. Formatado da entrada: 2018-08-01T09:48:00.000+0000"""
+        return dtparser.parse(text)
 
 
 ########################################
