@@ -12,6 +12,7 @@ import sys
 import threading
 
 from dateutil import parser as dtparser
+from dateutil import tz
 
 from monitors import Service, TrayIcon, curdir
 from monutil import execute, getProwl
@@ -277,7 +278,7 @@ class SisCopService(Service):
 
     def checkReturn(self, registro):
         """ Verifica se o retorno do almoço foi registrado. """
-        dtreg = registro['hora']
+        dtreg = registro['hora'].astimezone(tz.tzlocal())
 
         if registro['tipo'] == 'E' or dtreg.hour < 11 or dtreg.hour >= 15:
             return True
