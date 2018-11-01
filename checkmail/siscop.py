@@ -278,7 +278,9 @@ class SisCopService(Service):
 
     def checkReturn(self, registro):
         """ Verifica se o retorno do almoço foi registrado. """
-        dtreg = registro['hora'].astimezone(tz.tzlocal())
+        dtreg = registro['hora']
+        if dtreg.tzinfo:
+            dtreg = dtreg.astimezone(tz.tzlocal())
 
         if registro['tipo'] == 'E' or dtreg.hour < 11 or dtreg.hour >= 15:
             return True
