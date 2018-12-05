@@ -224,15 +224,15 @@ class SisCopService(Service):
         self.saveSession()
 
     def requestLogin(self):
-        self.session.get(self.urlLoginPage)
+        self.session.get(self.urlLoginPage, timeout=15000)
         self.setToken(None)
-        resp = self.session.post(self.urlAuth, json=self.fields)
+        resp = self.session.post(self.urlAuth, json=self.fields, timeout=15000)
         self.setToken(resp.headers.get('Set-Token', None))
         return self.assertLogged(resp)
 
     def requestRegistro(self):
         try:
-            resp = self.session.get(self.urlRegistro)
+            resp = self.session.get(self.urlRegistro, timeout=15000)
         except Exception, e:
             raise Exception(u"It was not possible to connect at SisCop. Error:\n\n" + str(e))
         return self.assertLogged(resp)
